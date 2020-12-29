@@ -1,0 +1,6 @@
+﻿  Header.cpp
+  Source.cpp
+  Generating Code...
+C:\Users\Adrian\Desktop\SQLite-V2\Header.cpp(1668): warning C4715: 'inregistrare::operator[]': not all control paths return a value
+C:\Users\Adrian\Desktop\SQLite-V2\Header.cpp(2269): warning C4715: 'tabela::operator-': not all control paths return a value
+  SQLite-V2.vcxproj -> C:\Users\Adrian\Desktop\SQLite-V2\Debug\SQLite-V2.exe
