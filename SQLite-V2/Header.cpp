@@ -4,25 +4,55 @@
 #include <cstring>
 #include <cctype>
 #include <iomanip>
-#include "Header.h"
-
+#include <string.h>
+#include <fstream>
 using namespace std;
 
 //membrii statici
-int baza_de_date::nr_instante = 0;
-baza_de_date* baza_de_date::instanta = 0;
-baza_de_date* procesor_comenzi::bd = nullptr;
+baza_de_date* baza_de_date::instanta = nullptr;
+
 
 //PROCESOR COMENZI
 //valideaza numele pentru tabele si coloane -- nu ar avea sens sa includ metoda in una din cele 2 clase
 //citeste comanda de la tastatura si o identifica
-void procesor_comenzi::proceseaza_comanda()
+void procesor_comenzi::citeste_comanda_fisier(const char* nume_fisier)
+{
+	ifstream f(nume_fisier);
+
+	char linie[1000];
+	if (f.is_open()) 
+	{
+		while (!f.eof()) 
+		{
+			f >> ws;
+			f.get(linie , 999);
+			
+			if (strcmp(linie, "") != 0)
+			{
+				procesor_comenzi::proceseaza_comanda(linie);
+			}
+		}
+	}
+	else
+	{
+		cout << "Nu se poate deschide fisierul " << nume_fisier << endl;
+	}
+	f.close();
+}
+
+void procesor_comenzi::citeste_comanda_consola()
 {
 	//CITIRE COMANDA
 	char comanda[1000];
 	cout << "Introduceti o comanda:" << endl;
 	cin >> ws;
 	cin.get(comanda, 999);
+	procesor_comenzi::proceseaza_comanda(comanda);
+}
+
+void procesor_comenzi::proceseaza_comanda(char* comanda)
+{
+	
 
 	//PRIMUL CUVANT DIN COMANDA IN TOKEN
 	char delims[] = " ";
@@ -100,6 +130,18 @@ void procesor_comenzi::proceseaza_comanda()
 
 				comanda_update::executa_comanda(context);
 			}
+		} 
+		else if (_stricmp(token, "IMPORT") == 0)
+		{
+			if (comanda_import::verifica_sintaxa(copie_sir))
+			{
+				char* copie_context = procesor_comenzi::copiere_sir(context);//probabil trebuie delete dupa ce o folosesc
+				if (comanda_import::verifica_fisier(copie_context))
+				{
+
+					comanda_import::executa_comanda(context);
+				}
+			}
 		}
 		else if (_stricmp(token, "EXIT") == 0)
 		{
@@ -107,7 +149,7 @@ void procesor_comenzi::proceseaza_comanda()
 		}
 		else if (_stricmp(token, "LIST") == 0)
 		{
-			bd->listeaza_tabele();
+			baza_de_date::get_instanta()->listeaza_tabele();
 		}
 		else
 		{
@@ -199,7 +241,13 @@ tip_coloane procesor_comenzi::identifica_tip_coloana(const char* valoare)
 
 	int nr_cifre = 0;
 	int nr_puncte = 0;
-	for (int i = 0; i < n; i++)
+	bool este_negativ = false;
+	if (valoare[0] == '-')
+	{
+		este_negativ = true;
+	}
+	
+	for (int i = ((este_negativ == true) ? 1 : 0); i < n; i++)
 	{
 		if (isdigit(valoare[i]))
 		{
@@ -212,17 +260,55 @@ tip_coloane procesor_comenzi::identifica_tip_coloana(const char* valoare)
 		}
 	}
 
-	if (nr_puncte == 1 && nr_cifre == n - 1)
+	if ((nr_puncte == 1 && nr_cifre == n - 1) || (nr_puncte == 1 && nr_cifre == n-2 && este_negativ))
 	{
 		return tip_coloane::real;
 	}
 
-	if (nr_cifre == n)
+	if (nr_cifre == n || (nr_cifre == n-1 && este_negativ))
 	{
 		return tip_coloane::integer;
 	}
 
 	return tip_coloane::tip_nedefinit;
+}
+
+tip_coloane procesor_comenzi::identifica_tip_coloana_csv(const char* valoare)
+{
+	int n = strlen(valoare);
+
+	int nr_cifre = 0;
+	int nr_puncte = 0;
+	bool este_negativ = false;
+	if (valoare[0] == '-')
+	{
+		este_negativ = true;
+	}
+
+	for (int i = ((este_negativ == true) ? 1 : 0); i < n; i++)
+	{
+		if (isdigit(valoare[i]))
+		{
+			nr_cifre++;
+		}
+		//numar punctele care nu sunt pe pozitiile marginale
+		else if (valoare[i] == '.' && i != 0 && i != n - 1)
+		{
+			nr_puncte++;
+		}
+	}
+
+	if ((nr_puncte == 1 && nr_cifre == n - 1) || (nr_puncte == 1 && nr_cifre == n - 2 && este_negativ))
+	{
+		return tip_coloane::real;
+	}
+
+	if (nr_cifre == n || (nr_cifre == n - 1 && este_negativ))
+	{
+		return tip_coloane::integer;
+	}
+
+	return tip_coloane::text;
 }
 
 //verificare dimensiune sa fie un numar
@@ -259,11 +345,185 @@ tip_coloane procesor_comenzi::conversie(string s)
 	{
 		return tip_coloane::integer;
 	}
-	else if (s == "REAL")
+	else if (s == "FLOAT")
 	{
 		return tip_coloane::real;
 	}
 	return tip_coloane::tip_nedefinit;
+}
+
+//COMANDA IMPORT
+bool comanda_import::verifica_sintaxa(char* c)
+{
+
+	if (procesor_comenzi::este_comanda_incompleta(c))
+	{
+		return false;
+	}
+
+	//verificare comanda se termina in ';'
+	if (c[strlen(c) - 1] != ';')
+	{
+		cout << "Comanda nu se termina cu ;" << endl;
+		return false;
+	}
+	c[strlen(c) - 1] = '\0';
+
+
+	char* token = nullptr;
+	char* context = nullptr;
+	token = strtok_s(c, " ", &context);
+	//verificari pentru tabela -- e in token
+	if (procesor_comenzi::este_comanda_incompleta(token))
+	{
+		return false;
+	}
+
+	//verific daca exista tabela in baza de date
+	procesor_comenzi::to_upper(token);
+
+	if (token != nullptr && !baza_de_date::get_instanta()->exista_tabela(token))
+	{
+		cout << "Tabela " << token << " nu exista" << endl;
+		return false;
+	}
+	//verificari pentru fisier -- e in context
+	if (procesor_comenzi::este_comanda_incompleta(context))
+	{
+		return false;
+	}
+	char aux[5];
+	strcpy_s(aux, 5, context + strlen(context) - 4);
+	procesor_comenzi::to_upper(aux);
+	if (strcmp(aux, ".CSV"))
+	{
+		cout << "Fisierul" << context << " nu este un fisier CSV" << endl;
+		return false;
+	}
+	//verific daca exista fisierul -- 
+	ifstream f(context, ios::_Nocreate);
+	if (!f)
+	{
+		cout << "Fisierul " << context << " nu exista" << endl;
+		return false;
+	}
+
+	return true;
+}
+bool comanda_import::verifica_fisier(char* c)
+{
+	//IMPORT nume_tabela nume_fisier.CSV
+	char* token = nullptr;
+	char* context = nullptr;
+	cout << c << endl;
+	c[strlen(c) - 1] = '\0';//scot ;
+	token = strtok_s(c, " ", &context);// in token e numele tabelei
+
+	tabela t = baza_de_date::get_instanta()->get_tabela(token);
+	//string nume_tabela(token);
+	fstream f;
+	f.open(context, ios::in);
+
+	char linii[20][100]; //fisierul poate sa aiba maxim 20 de linii
+	int i = 0;
+	while (!f.eof())
+	{
+		string linie;
+		getline(f, linie); //citesc o linie si o salvez intr-un string pe care il introduc in vectorul de linii
+		strcpy_s(linii[i], linie.length() + 1, linie.c_str());
+		i++;
+	}
+
+	//acum verifc ca se potriveste fiecare linie cu tipul tabelei
+	for (int j = 0; j < i; j++)
+	{
+		char* token1 = nullptr;
+		char* context1 = nullptr;
+		int nr_valori = 0;
+		token1 = strtok_s(linii[j], ",", &context1);
+		while (token1 != nullptr)
+		{
+			if (nr_valori > t.get_nr_coloane())
+			{
+				cout << "Pe o linie din fisierul CSV exista prea multe valori pentru structura tabelei" << endl;
+				return false;
+			}
+
+			tip_coloane tip_valoare = procesor_comenzi::identifica_tip_coloana_csv(token1);
+
+			//verificare potrivire tip
+			if (tip_valoare != procesor_comenzi::conversie(t.get_coloana(nr_valori).get_tip_coloana()))
+			{
+				cout << "Nepotrivire tip pentru coloana " << t.get_coloana(nr_valori).get_nume_coloana();
+				return false;
+			}
+
+			//verificare potrivire dimensiune
+			int lungime = (int)strlen(token1) - (tip_valoare == tip_coloane::text ? 2 : 0);
+			if (lungime > t.get_coloana(nr_valori).get_dimensiune_coloana())
+			{
+				cout << "Valoarea introdusa pentru coloana " << token1 << " este prea mare" << endl;
+				return false;
+			}
+
+
+			nr_valori++;
+			token1 = strtok_s(nullptr, ",()", &context1);
+		}
+		if (nr_valori < t.get_nr_coloane())
+		{
+			cout << "Ati introdus prea putine coloane pentru strucutra tabelei " << t.get_nume_tabela() << endl;
+			return false;
+		}
+
+	}
+	return true;
+}
+void comanda_import::executa_comanda(char* c)
+{
+	//IMPORT nume_tabela nume_fisier.CSV
+	char* token = nullptr;
+	char* context = nullptr;
+	//cout << c << endl;
+	c[strlen(c) - 1] = '\0';//scot ;
+	token = strtok_s(c, " ", &context);// in token e numele tabelei
+	cout << "Importam in tabela " << token << endl;
+
+	string nume_tabela(token);
+	fstream f;
+	f.open(context, ios::in);
+
+
+	char linii[20][100]; //fisierul poate sa aiba maxim 20 de linii
+	int i = 0;
+	while (!f.eof())
+	{
+		string linie;
+		getline(f, linie); //citesc o linie si o salvez intr-un string pe care il introduc in vectorul de linii
+		strcpy_s(linii[i], linie.length() + 1, linie.c_str());
+		i++;
+	}
+
+
+	for (int j = 0; j < i; j++)
+	{
+		char valori[100][100];
+		int nr_i = 0;
+		char* token1 = nullptr;
+		char* context1 = nullptr;
+		int nr_valori = 0;
+		token1 = strtok_s(linii[j], ",", &context1);
+		while (token1 != nullptr)
+		{
+			tip_coloane tip_valoare = procesor_comenzi::identifica_tip_coloana(token1);
+
+			strcpy_s(valori[nr_i++], strlen(token1) + 1, token1);
+			token1 = strtok_s(nullptr, ",", &context1);
+		}
+
+		inregistrare inr(nr_i, valori);
+		baza_de_date::get_instanta()->insereaza_inregistrari(nume_tabela.c_str(), inr);
+	}
 }
 
 //COMANDA CREATE
@@ -315,7 +575,7 @@ bool comanda_create::verifica_sintaxa(char* c)
 		return false;
 	}
 
-	if (procesor_comenzi::get_bd()->exista_tabela(token) == true)
+	if (baza_de_date::get_instanta()->exista_tabela(token) == true)
 	{
 		cout << "Numele tabelei " << token << " exista deja" << endl;
 		return false;
@@ -353,7 +613,7 @@ bool comanda_create::verifica_sintaxa(char* c)
 		{
 			tip_col = tip_coloane::integer;
 		}
-		else if (_stricmp("REAL", token) == 0)
+		else if (_stricmp("FLOAT", token) == 0)
 		{
 			tip_col = tip_coloane::real;
 		}
@@ -459,7 +719,7 @@ void comanda_create::executa_comanda(char* c)
 		{
 			c.set_tip_coloana(tip_coloane::integer);
 		}
-		else if (_stricmp("REAL", token) == 0)
+		else if (_stricmp("FLOAT", token) == 0)
 		{
 			c.set_tip_coloana(tip_coloane::real);
 		}
@@ -487,7 +747,9 @@ void comanda_create::executa_comanda(char* c)
 
 	tabela t(nume_t.c_str(), nr_coloane, coloane);
 
-	procesor_comenzi::get_bd()->adauga_tabela(t);
+	baza_de_date::get_instanta()->adauga_tabela(t);
+
+	cout << "Tabela " << nume_t << " a fost creata." << endl;
 }
 
 //COMANDA DISPLAY
@@ -534,7 +796,7 @@ bool comanda_display::verifica_sintaxa(char* c)
 	//verific daca exista tabela in baza de date
 	procesor_comenzi::to_upper(context);
 
-	if (context != nullptr && !procesor_comenzi::get_bd()->exista_tabela(context))
+	if (context != nullptr && !baza_de_date::get_instanta()->exista_tabela(context))
 	{
 		cout << "Tabela " << context << " nu exista" << endl;
 		return false;
@@ -546,8 +808,8 @@ bool comanda_display::verifica_sintaxa(char* c)
 void comanda_display::executa_comanda(char* c)
 {
 	c[strlen(c) - 1] = '\0';
-	cout << "s-a apelat comanda display pentru tabela: " << c + 6 << endl;
-	procesor_comenzi::get_bd()->afiseaza_tabela(c + 6);
+	//cout << "s-a apelat comanda display pentru tabela: " << c + 6 << endl;
+	baza_de_date::get_instanta()->afiseaza_tabela(c + 6, 1);
 }
 
 //COMANDA DROP
@@ -593,7 +855,7 @@ bool comanda_drop::verifica_sintaxa(char* c)
 	//verific daca exista deja tabela in baza de date
 	procesor_comenzi::to_upper(context);
 
-	if (context != nullptr && !procesor_comenzi::get_bd()->exista_tabela(context))
+	if (context != nullptr && !baza_de_date::get_instanta()->exista_tabela(context))
 	{
 		cout << "Tabela " << context << " nu exista" << endl;
 		return false;
@@ -605,8 +867,10 @@ bool comanda_drop::verifica_sintaxa(char* c)
 void comanda_drop::executa_comanda(char* c)
 {
 	c[strlen(c) - 1] = '\0';
-	cout << "s-a apelat comanda drop pentru tabela: " << c + 6 << endl;
-	procesor_comenzi::get_bd()->sterge_tabela(c + 6);
+	//cout << "s-a apelat comanda drop pentru tabela: " << c + 6 << endl;
+	procesor_comenzi::to_upper(c + 6);
+	baza_de_date::get_instanta()->sterge_tabela(c + 6);
+	cout << "Tabela " << c + 6 << " a fost stearsa."<<endl;
 }
 
 
@@ -653,13 +917,13 @@ bool comanda_insert::verifica_sintaxa(char* c)
 	//verific daca exista deja tabela in baza de date
 	procesor_comenzi::to_upper(token);
 
-	if (!procesor_comenzi::get_bd()->exista_tabela(token))
+	if (!baza_de_date::get_instanta()->exista_tabela(token))
 	{
 		cout << "Tabela " << token << " nu exista" << endl;
 		return false;
 	}
 
-	tabela t = procesor_comenzi::get_bd()->get_tabela(token);
+	tabela t = baza_de_date::get_instanta()->get_tabela(token);
 
 	//verificare prezenta cuvant VALUES
 	token = strtok_s(nullptr, "(", &context);
@@ -747,7 +1011,7 @@ void comanda_insert::executa_comanda(char* c)
 	}
 
 	inregistrare inr(nr_i, valori);
-	procesor_comenzi::get_bd()->insereaza_inregistrari(nume_tabela.c_str(), inr);
+	baza_de_date::get_instanta()->insereaza_inregistrari(nume_tabela.c_str(), inr);
 }
 
 
@@ -794,13 +1058,13 @@ bool comanda_delete::verifica_sintaxa(char* c)
 	//verific daca exista tabela in baza de date
 	procesor_comenzi::to_upper(token);
 
-	if (!procesor_comenzi::get_bd()->exista_tabela(token))
+	if (!baza_de_date::get_instanta()->exista_tabela(token))
 	{
 		cout << "Tabela " << token << " nu exista" << endl;
 		return false;
 	}
 
-	tabela t = procesor_comenzi::get_bd()->get_tabela(token);
+	tabela t = baza_de_date::get_instanta()->get_tabela(token);
 
 	//verificare existenta cuvant WHERE
 	token = strtok_s(nullptr, " ", &context);
@@ -874,7 +1138,7 @@ void comanda_delete::executa_comanda(char* c)
 
 	conditie cond(token, context);
 
-	procesor_comenzi::get_bd()->sterge_inregistrari(nume_tabela.c_str(), cond);
+	baza_de_date::get_instanta()->sterge_inregistrari(nume_tabela.c_str(), cond);
 }
 
 //COMANDA UPDATE
@@ -909,13 +1173,13 @@ bool comanda_update::verifica_sintaxa(char* c)
 	//verific daca exista tabela in baza de date
 	procesor_comenzi::to_upper(token);
 
-	if (!procesor_comenzi::get_bd()->exista_tabela(token))
+	if (!baza_de_date::get_instanta()->exista_tabela(token))
 	{
 		cout << "Tabela " << token << " nu exista" << endl;
 		return false;
 	}
 
-	tabela t = procesor_comenzi::get_bd()->get_tabela(token);
+	tabela t = baza_de_date::get_instanta()->get_tabela(token);
 
 	//verificare existenta cuvant SET
 	token = strtok_s(nullptr, " ", &context);
@@ -1024,7 +1288,7 @@ void comanda_update::executa_comanda(char* c)
 	procesor_comenzi::to_upper(token);
 	c1.set_nume_coloana(token);
 	//cout << "Se face set pe coloana: " << token << " cu valoarea: ";
-	
+
 	token = strtok_s(nullptr, " ", &context);
 
 	if (procesor_comenzi::identifica_tip_coloana(token) == tip_coloane::text)
@@ -1042,7 +1306,7 @@ void comanda_update::executa_comanda(char* c)
 	procesor_comenzi::to_upper(token);
 	conditie c2(token, context);
 
-	procesor_comenzi::get_bd()->actualizeaza_inregistrari(nume_tabela.c_str(), c1, c2);
+	baza_de_date::get_instanta()->actualizeaza_inregistrari(nume_tabela.c_str(), c1, c2);
 }
 
 
@@ -1079,7 +1343,7 @@ bool comanda_select::verifica_sintaxa(char* c)
 		restul_sirului = final_paranteze + 1;
 		*final_paranteze = '\0';
 
-		
+
 		char* token = nullptr;
 		char* context = nullptr;
 		token = strtok_s(c, " (),", &context);
@@ -1088,7 +1352,7 @@ bool comanda_select::verifica_sintaxa(char* c)
 			procesor_comenzi::to_upper(token);
 			//nu merge la peste 20 de parametrii
 			nume_coloane[nr_coloane++] = token;
-			cout << token << endl;
+			//cout << token << endl;
 			token = strtok_s(nullptr, " (),", &context);
 		}
 		coloane_specifice = true;
@@ -1134,13 +1398,13 @@ bool comanda_select::verifica_sintaxa(char* c)
 
 	procesor_comenzi::to_upper(token);
 
-	if (!procesor_comenzi::get_bd()->exista_tabela(token))
+	if (!baza_de_date::get_instanta()->exista_tabela(token))
 	{
 		cout << "Tabela " << token << " nu exista" << endl;
 		return false;
 	}
 
-	tabela t = procesor_comenzi::get_bd()->get_tabela(token);
+	tabela t = baza_de_date::get_instanta()->get_tabela(token);
 
 	if (coloane_specifice == true)
 	{
@@ -1199,7 +1463,7 @@ bool comanda_select::verifica_sintaxa(char* c)
 void comanda_select::executa_comanda(char* c)
 {
 
-	cout << "se executa comanda select" << endl;
+	//cout << "se executa comanda select" << endl;
 	c[strlen(c) - 1] = '\0';
 
 
@@ -1218,22 +1482,22 @@ void comanda_select::executa_comanda(char* c)
 
 	if (c[0] == '(' && strstr(c, ")") != nullptr)
 	{
-		
+
 		char* final_paranteze = strstr(c, ")");
 		restul_sirului = final_paranteze + 1;
 		*final_paranteze = '\0';
 
-		
+
 		char* token = nullptr;
 		char* context = nullptr;
-		cout << endl << "se selecteaza coloanele" << endl;
+		//cout << endl << "se selecteaza coloanele" << endl;
 		token = strtok_s(c, " (),", &context);
 		while (token != nullptr)
 		{
 			procesor_comenzi::to_upper(token);
 			//--doar sub 20 de parametrii
 			nume_coloane[nr_coloane++] = token;
-			cout << token << endl;
+			//cout << token << endl;
 			token = strtok_s(nullptr, " (),", &context);
 		}
 		toate_coloanele = false;
@@ -1266,19 +1530,19 @@ void comanda_select::executa_comanda(char* c)
 
 	if (toate_coloanele == true && exista_where == false)
 	{
-		procesor_comenzi::get_bd()->afiseaza_toate(nume_tabela.c_str());
+		baza_de_date::get_instanta()->afiseaza_toate(nume_tabela.c_str());
 	}
 	else if (toate_coloanele == true && exista_where == true)
 	{
-		procesor_comenzi::get_bd()->afiseaza_toate(nume_tabela.c_str(), cond);
+		baza_de_date::get_instanta()->afiseaza_toate(nume_tabela.c_str(), cond);
 	}
 	else if (toate_coloanele == false && exista_where == false)
 	{
-		procesor_comenzi::get_bd()->afiseaza_partial(nume_tabela.c_str(), nume_coloane, nr_coloane);
+		baza_de_date::get_instanta()->afiseaza_partial(nume_tabela.c_str(), nume_coloane, nr_coloane);
 	}
 	else if (toate_coloanele == false && exista_where == true)
 	{
-		procesor_comenzi::get_bd()->afiseaza_partial(nume_tabela.c_str(), nume_coloane, nr_coloane, cond);
+		baza_de_date::get_instanta()->afiseaza_partial(nume_tabela.c_str(), nume_coloane, nr_coloane, cond);
 	}
 }
 
@@ -1678,13 +1942,184 @@ string inregistrare::get_valoare(int index)
 	return "";
 }
 
-void inregistrare::afiseaza_inregistrare(int dimensiune)
+void inregistrare::afiseaza_inregistrare(ofstream& out,int dimensiune)
 {
 	for (int i = 0; i < nr_campuri; i++)
 	{
 		cout << left << setw(dimensiune) << setfill(' ') << valori_campuri[i];
+		out << left << setw(dimensiune) << setfill(' ') << valori_campuri[i];
 	}
 	cout << endl;
+	out << endl;
+}
+
+//REPOSITORY
+repository::repository() {}
+repository::repository(char* nume_fisier)
+{
+	if (nume_fisier != nullptr)
+	{
+		this->nume_fisier = string(nume_fisier) + ".bin";
+	}
+}
+void repository::adauga(inregistrare obj)
+{
+	ofstream f(nume_fisier, ios::binary | ios::app);
+	obj.serializare(f);
+	f.close();
+}
+
+void repository::sterge(int index, conditie cond)
+{
+	ifstream f(nume_fisier, ios::binary);
+	ofstream g("temp.bin", ios::binary | ios::trunc);
+
+	int k = 0;
+	if (f.is_open())
+	{
+		while (!f.eof())
+		{
+			inregistrare obj;
+			obj.deserializare(f);
+			if (obj.get_nr_campuri() != 0)
+			{
+				if (cond.get_valoare_coloana() != obj.get_valoare(index))
+				{
+					obj.serializare(g);
+				}
+				else
+				{
+					k++;
+				}
+			}
+		}
+		f.close();
+		g.close();
+		cout << k << " inregistrari sterse" << endl;
+		remove(nume_fisier.c_str());
+		int r = rename("temp.bin", nume_fisier.c_str());
+	}
+}
+
+void repository::actualizeaza(int index_cu, int index_cw, conditie c1, conditie c2)
+{
+	ifstream f(nume_fisier, ios::binary);
+	ofstream g("temp.bin", ios::binary | ios::trunc);
+	int k = 0;
+	if (f.is_open()) {
+		while (!f.eof())
+		{
+			inregistrare obj;
+			obj.deserializare(f);
+
+			//aici put conditia pt care se modifica
+			if (obj.get_nr_campuri() != 0 && c2.get_valoare_coloana() == obj.get_valoare(index_cw))
+			{
+				obj.set_valoare(c1.get_valoare_coloana().c_str(), index_cu);
+				k++;
+			}
+			obj.serializare(g);
+		}
+		f.close();
+		g.close();
+		cout << k << " inregistrari modificate." << endl;
+		remove(nume_fisier.c_str());
+		int r = rename("temp.bin", nume_fisier.c_str());
+	}
+}
+
+void repository::afiseaza_toate(ofstream& out, int dimensiune)
+{
+	ifstream f(nume_fisier, ios::binary);
+	if (!f.is_open())
+	{
+		return;
+	}
+	while (!f.eof())
+	{
+		inregistrare obj;
+		obj.deserializare(f);
+		if (obj.get_nr_campuri() != 0)
+		{
+			obj.afiseaza_inregistrare(out,dimensiune);
+		}
+	}
+	f.close();
+}
+
+void repository::afiseaza_toate(ofstream& out,int dimensiune, conditie cond, int index_coloana_verificare)
+{
+	ifstream f(nume_fisier, ios::binary);
+	if (!f.is_open())
+	{
+		return;
+	}
+	while (!f.eof())
+	{
+		inregistrare obj;
+		obj.deserializare(f);
+		if (obj.get_nr_campuri() != 0 && obj.get_valoare(index_coloana_verificare) == cond.get_valoare_coloana())
+		{
+			obj.afiseaza_inregistrare(out,dimensiune);
+		}
+
+	}
+	f.close();
+}
+
+void repository::afiseaza_partial(ofstream& out, int dimensiune, int ind[], int nr)
+{
+	ifstream f(nume_fisier, ios::binary);
+	if (!f.is_open())
+	{
+		return;
+	}
+	while (!f.eof())
+	{
+		inregistrare obj;
+		obj.deserializare(f);
+
+		if (obj.get_nr_campuri() != 0)
+		{
+			for (int i = 0; i < nr; i++)
+			{
+				cout << left << setw(dimensiune) << setfill(' ') << obj.get_valoare(ind[i]);
+				out << left << setw(dimensiune) << setfill(' ') << obj.get_valoare(ind[i]);
+			}
+			cout << endl;
+			out << endl;
+		}
+	}
+	f.close();
+}
+void repository::afiseaza_partial(ofstream& out, int dimensiune, int ind[], int nr, int index_coloana_verificare, conditie cond)
+{
+	ifstream f(nume_fisier, ios::binary);
+	if (!f.is_open())
+	{
+		return;
+	}
+	while (!f.eof())
+	{
+		inregistrare obj;
+		obj.deserializare(f);
+		if (obj.get_nr_campuri() != 0)
+		{
+			if (strcmp(obj.get_valoare(index_coloana_verificare).c_str(), cond.get_valoare_coloana().c_str()) == 0)
+			{
+				for (int i = 0; i < nr; i++)
+				{
+					cout << left << setw(dimensiune) << setfill(' ') << obj.get_valoare(ind[i]);
+					out << left << setw(dimensiune) << setfill(' ') << obj.get_valoare(ind[i]);
+					
+				}
+				cout << endl;
+				out << endl;
+			}
+		}
+	}
+	f.close();
+
 }
 
 //COLOANA
@@ -1820,7 +2255,7 @@ ostream& operator<<(ostream& out, coloana c)
 	}
 	else if (c.tip_coloana == tip_coloane::real)
 	{
-		out << "REAL";
+		out << "FLOAT";
 	}
 	else if (c.tip_coloana == tip_coloane::text)
 	{
@@ -1918,7 +2353,7 @@ string coloana::get_tip_coloana()
 	}
 	else if (this->tip_coloana == tip_coloane::real)
 	{
-		return "REAL";
+		return "FLOAT";
 	}
 	else if (this->tip_coloana == tip_coloane::text)
 	{
@@ -1979,7 +2414,7 @@ tabela::tabela()
 {
 	nume_tabela = nullptr;
 	nr_coloane = 0;
-	nr_inregistrari = 0;
+	repo = repository();
 }
 
 tabela::tabela(const char* nume, int nr_c, coloana col[]) : tabela()
@@ -1995,17 +2430,10 @@ tabela::tabela(const char* nume, int nr_c, coloana col[]) : tabela()
 		for (int i = 0; i < nr_c; i++)
 			this->coloane[i] = col[i];
 	}
+
+	repo = repository(nume_tabela);
 }
 
-tabela::tabela(const char* nume, int nr_c, coloana col[], int nr_i, inregistrare inr[]) : tabela(nume, nr_c, col)
-{
-	if (nr_i > 0)
-	{
-		this->nr_inregistrari = nr_i;
-		for (int i = 0; i < nr_i; i++)
-			this->inregistrari[i] = inr[i];
-	}
-}
 
 //regula celor trei
 tabela::tabela(const tabela& t)
@@ -2032,16 +2460,7 @@ tabela::tabela(const tabela& t)
 		this->nr_coloane = 0;
 	}
 
-	if (t.nr_inregistrari > 0)
-	{
-		this->nr_inregistrari = t.nr_inregistrari;
-		for (int i = 0; i < t.nr_inregistrari; i++)
-			this->inregistrari[i] = t.inregistrari[i];
-	}
-	else
-	{
-		this->nr_inregistrari = 0;
-	}
+	this->repo = t.repo;
 }
 
 tabela tabela::operator=(tabela t)
@@ -2073,16 +2492,7 @@ tabela tabela::operator=(tabela t)
 		this->nr_coloane = 0;
 	}
 
-	if (t.nr_inregistrari > 0)
-	{
-		this->nr_inregistrari = t.nr_inregistrari;
-		for (int i = 0; i < t.nr_inregistrari; i++)
-			this->inregistrari[i] = t.inregistrari[i];
-	}
-	else
-	{
-		this->nr_inregistrari = 0;
-	}
+	this->repo = repo;
 
 	return *this;
 }
@@ -2109,15 +2519,6 @@ ostream& operator<<(ostream& out, tabela t)
 			out << t.coloane[i];
 		}
 	}
-	out << "Nr inregistrari: " << t.nr_inregistrari << endl;
-	if (t.nr_inregistrari > 0)
-	{
-		out << "Inregistrari: " << endl;
-		for (int i = 0; i < t.nr_inregistrari; i++)
-		{
-			out << t.inregistrari[i];
-		}
-	}
 	return out;
 }
 
@@ -2135,12 +2536,6 @@ istream& operator>>(istream& in, tabela& t)
 	for (int i = 0; i < t.nr_coloane; i++)
 	{
 		in >> t.coloane[i];
-	}
-	cout << "Dati nr de inregistrari: ";
-	in >> t.nr_inregistrari;
-	for (int i = 0; i < t.nr_inregistrari; i++)
-	{
-		in >> t.inregistrari[i];
 	}
 
 	return in;
@@ -2217,21 +2612,6 @@ int tabela::get_index_coloana(const char* nume_coloana)
 	return -1;
 }
 
-int tabela::get_nr_inregistrari()
-{
-	return this->nr_inregistrari;
-}
-
-inregistrare tabela::get_inregistrare(int index)
-{
-	return inregistrari[index];
-}
-
-void tabela::set_inregistrare(inregistrare inr, int index)
-{
-	inregistrari[index] = inr;
-}
-
 //alti operatori
 //alte supraincarcari de operatori
 bool tabela::operator!()
@@ -2240,43 +2620,43 @@ bool tabela::operator!()
 }
 
 //tabela fara ultima inregistrare;
-tabela tabela::operator--()
-{
-	if (nr_inregistrari > 0)
-	{
-		this->nr_inregistrari--;
-	}
-	return *this;
-}
+//tabela tabela::operator--()
+//{
+//	if (nr_inregistrari > 0)
+//	{
+//		this->nr_inregistrari--;
+//	}
+//	return *this;
+//}
 
-tabela tabela::operator--(int i)
-{
-	tabela copie = *this;
-	this->nr_inregistrari--;
-	return copie;
-}
+//tabela tabela::operator--(int i)
+//{
+//	tabela copie = *this;
+//	this->nr_inregistrari--;
+//	return copie;
+//}
 
-tabela tabela::operator-(int valoare)
-{
-	if (valoare > 0)
-	{
-		nr_inregistrari = nr_inregistrari > valoare ? nr_inregistrari - valoare : 0;
-	}
-	else
-	{
-		throw 10; // cod eroare valoare negativa
-	}
-}
+//tabela tabela::operator-(int valoare)
+//{
+//	if (valoare > 0)
+//	{
+//		nr_inregistrari = nr_inregistrari > valoare ? nr_inregistrari - valoare : 0;
+//	}
+//	else
+//	{
+//		throw 10; // cod eroare valoare negativa
+//	}
+//}
 
 tabela::operator int()
 {
 	return nr_coloane;
 }
 
-bool tabela::operator<(tabela t)
-{
-	return this->nr_inregistrari < t.nr_inregistrari;
-}
+//bool tabela::operator<(tabela t)
+//{
+//	return this->nr_inregistrari < t.nr_inregistrari;
+//}
 
 //alte functii
 void tabela::afiseaza_structura_tabela()
@@ -2284,36 +2664,58 @@ void tabela::afiseaza_structura_tabela()
 	const int dimensiune = 30;
 	const char separator = ' ';
 
+	string nume_fisier = baza_de_date::get_instanta()->get_nume_fisier_display();
+
+	ofstream out(nume_fisier, ios::trunc);
+
+	//la consola
 	cout << left << setw(dimensiune) << setfill(separator) << "Nume";
 	cout << left << setw(dimensiune) << setfill(separator) << "Tip";
 	cout << left << setw(dimensiune) << setfill(separator) << "Dimensiune";
 	cout << left << setw(dimensiune) << setfill(separator) << "Valoare implicita";
 	cout << endl;
 
+	//in fisiere
+	out << left << setw(dimensiune) << setfill(separator) << "Nume";
+	out << left << setw(dimensiune) << setfill(separator) << "Tip";
+	out << left << setw(dimensiune) << setfill(separator) << "Dimensiune";
+	out << left << setw(dimensiune) << setfill(separator) << "Valoare implicita";
+	out << endl;
+
 	for (int i = 0; i < 4 * dimensiune; i++)
 	{
 		cout << "-";
+		out << "-";
 	}
 
 	cout << endl;
+	out << endl;
 
 	for (int i = 0; i < nr_coloane; i++)
 	{
 		coloana c = this->get_coloana(i);
+		//la consola
 		cout << left << setw(dimensiune) << setfill(separator) << c.get_nume_coloana();
 		cout << left << setw(dimensiune) << setfill(separator) << c.get_tip_coloana();
 		cout << left << setw(dimensiune) << setfill(separator) << c.get_dimensiune_coloana();
 		cout << left << setw(dimensiune) << setfill(separator) << c.get_valoare_implicita();
 		cout << endl;
+		//in fisier
+		out << left << setw(dimensiune) << setfill(separator) << c.get_nume_coloana();
+		out << left << setw(dimensiune) << setfill(separator) << c.get_tip_coloana();
+		out << left << setw(dimensiune) << setfill(separator) << c.get_dimensiune_coloana();
+		out << left << setw(dimensiune) << setfill(separator) << c.get_valoare_implicita();
+		out << endl;
 	}
+	out.close();
+	cout << "Raport generat in fisierul " << nume_fisier << endl;
 }
+
+
 
 void tabela::adauga_inregistrare(inregistrare in)
 {
-	//de verificat sa nu iasa in afara vectorului
-
-	this->inregistrari[nr_inregistrari] = in;
-	this->nr_inregistrari++;
+	repo.adauga(in);
 }
 
 void tabela::sterge_inregistrare(conditie cond)
@@ -2329,18 +2731,7 @@ void tabela::sterge_inregistrare(conditie cond)
 	}
 	if (index != nr_coloane)
 	{
-		for (int i = 0; i < nr_inregistrari; i++)
-		{
-			if (cond.get_valoare_coloana() == inregistrari[i].get_valoare(index))
-			{
-				for (int j = i; j < nr_inregistrari - 1; j++)
-				{
-					inregistrari[j] = inregistrari[j + 1];
-				}
-				nr_inregistrari--;
-				i--;
-			}
-		}
+		repo.sterge(index,cond);
 	}
 }
 
@@ -2367,16 +2758,9 @@ void tabela::actualizeaza_inregistrare(conditie c1, conditie c2)
 	int k = 0;
 	if (index_cu != nr_coloane && index_cw != nr_coloane)
 	{
-		for (int i = 0; i < nr_inregistrari; i++)
-		{
-			if (c2.get_valoare_coloana() == inregistrari[i].get_valoare(index_cw))
-			{
-				inregistrari[i].set_valoare(c1.get_valoare_coloana().c_str(), index_cu);
-				k++;
-			}
-		}
+		repo.actualizeaza(index_cu, index_cw, c1, c2);
 	}
-	cout << k << " inregistrari modificate." << endl;
+	
 }
 
 void tabela::afiseaza_toate()
@@ -2385,23 +2769,29 @@ void tabela::afiseaza_toate()
 	const int dimensiune = 20;
 	const char separator = ' ';
 
+	string nume_fisier = baza_de_date::get_instanta()->get_nume_fisier_select();
+	ofstream out(nume_fisier, ios::trunc);
+
 	for (int i = 0; i < nr_coloane; i++)
 	{
 		cout << left << setw(dimensiune) << setfill(separator) << coloane[i].get_nume_coloana();
+		out << left << setw(dimensiune) << setfill(separator) << coloane[i].get_nume_coloana();
 	}
 
 	cout << endl;
+	out << endl;
 	for (int i = 0; i < nr_coloane * dimensiune; i++)
 	{
 		cout << "-";
+		out << "-";
 	}
 
 	cout << endl;
+	out << endl;
 
-	for (int i = 0; i < nr_inregistrari; i++)
-	{
-		inregistrari[i].afiseaza_inregistrare(dimensiune);
-	}
+	repo.afiseaza_toate(out,dimensiune);
+	out.close();
+	cout << "Raportul se afla in fisierul " << nume_fisier << endl;
 }
 
 void tabela::afiseaza_toate(conditie cond)
@@ -2409,28 +2799,30 @@ void tabela::afiseaza_toate(conditie cond)
 	const int dimensiune = 20;
 	const char separator = ' ';
 
+	string nume_fisier = baza_de_date::get_instanta()->get_nume_fisier_select();
+	ofstream out(nume_fisier, ios::trunc);
+
 	for (int i = 0; i < nr_coloane; i++)
 	{
 		cout << left << setw(dimensiune) << setfill(separator) << coloane[i].get_nume_coloana();
+		out << left << setw(dimensiune) << setfill(separator) << coloane[i].get_nume_coloana();
 	}
 
 	cout << endl;
+	out << endl;
 	for (int i = 0; i < nr_coloane * dimensiune; i++)
 	{
 		cout << "-";
+		out << "-";
 	}
 
 	cout << endl;
+	out << endl;
 
 	int index_coloana_verificare = this->get_index_coloana(cond.get_nume_coloana().c_str());
-
-	for (int i = 0; i < nr_inregistrari; i++)
-	{
-		if (inregistrari[i].get_valoare(index_coloana_verificare) == cond.get_valoare_coloana())
-		{
-			inregistrari[i].afiseaza_inregistrare(dimensiune);
-		}
-	}
+	repo.afiseaza_toate(out, dimensiune, cond, index_coloana_verificare);
+	out.close();
+	cout << "Raportul se afla in fisierul " << nume_fisier << endl;
 }
 
 void tabela::afiseaza_partial(string* p_nume_coloane, int p_nr_coloane)
@@ -2438,28 +2830,38 @@ void tabela::afiseaza_partial(string* p_nume_coloane, int p_nr_coloane)
 	const int dimensiune = 20;
 	const char separator = ' ';
 
+	string nume_fisier = baza_de_date::get_instanta()->get_nume_fisier_select();
+	ofstream out(nume_fisier, ios::trunc);
+
 	for (int i = 0; i < p_nr_coloane; i++)
 	{
 		cout << left << setw(dimensiune) << setfill(separator) << p_nume_coloane[i];
+		out << left << setw(dimensiune) << setfill(separator) << p_nume_coloane[i];
 	}
 
 	cout << endl;
+	out << endl;
+
 	for (int i = 0; i < p_nr_coloane * dimensiune; i++)
 	{
 		cout << "-";
+		out << "-";
 	}
 
 	cout << endl;
+	out << endl;
 
-	for (int i = 0; i < nr_inregistrari; i++)
+	int ind_col[20];
+	for (int i = 0; i < p_nr_coloane; i++)
 	{
-		for (int j = 0; j < p_nr_coloane; j++)
-		{
-			int index_valoare = this->get_index_coloana(p_nume_coloane[j].c_str());
-			cout << left << setw(dimensiune) << setfill(separator) << inregistrari[i].get_valoare(index_valoare);
-		}
-		cout << endl;
+		ind_col[i] = this->get_index_coloana(p_nume_coloane[i].c_str());
+		
 	}
+
+	repo.afiseaza_partial(out, dimensiune, ind_col, p_nr_coloane);
+	out.close();
+	cout << "Raportul se afla in fisierul " << nume_fisier << endl;
+	
 }
 
 void tabela::afiseaza_partial(string* p_nume_coloane, int p_nr_coloane, conditie cond)
@@ -2467,33 +2869,39 @@ void tabela::afiseaza_partial(string* p_nume_coloane, int p_nr_coloane, conditie
 	const int dimensiune = 20;
 	const char separator = ' ';
 
+	string nume_fisier = baza_de_date::get_instanta()->get_nume_fisier_select();
+	ofstream out(nume_fisier, ios::trunc);
+
 	for (int i = 0; i < p_nr_coloane; i++)
 	{
 		cout << left << setw(dimensiune) << setfill(separator) << p_nume_coloane[i];
+		out << left << setw(dimensiune) << setfill(separator) << p_nume_coloane[i];
 	}
 
 	cout << endl;
+	out << endl;
+
 	for (int i = 0; i < p_nr_coloane * dimensiune; i++)
 	{
 		cout << "-";
+		out << "-";
 	}
 
 	cout << endl;
+	out << endl;
 
 	int index_coloana_verificare = this->get_index_coloana(cond.get_nume_coloana().c_str());
 
-	for (int i = 0; i < nr_inregistrari; i++)
+	int ind_col[20];
+	for (int i = 0; i < p_nr_coloane; i++)
 	{
-		if (strcmp(inregistrari[i].get_valoare(index_coloana_verificare).c_str(), cond.get_valoare_coloana().c_str()) == 0)
-		{
-			for (int j = 0; j < p_nr_coloane; j++)
-			{
-				int index_valoare = this->get_index_coloana(p_nume_coloane[j].c_str());
-				cout << left << setw(dimensiune) << setfill(separator) << inregistrari[i].get_valoare(index_valoare);
-			}
-			cout << endl;
-		}
+		ind_col[i] = this->get_index_coloana(p_nume_coloane[i].c_str());
+
 	}
+
+	repo.afiseaza_partial(out, dimensiune, ind_col, p_nr_coloane,index_coloana_verificare, cond);
+	out.close();
+	cout << "Raportul se afla in fisierul " << nume_fisier << endl;
 }
 
 
@@ -2512,21 +2920,60 @@ bool tabela::exista_coloana(string nume_col)
 
 //BAZA DE DATE
 //apelator pentru constructor
-baza_de_date* baza_de_date::getInstance(string nume)
+baza_de_date::baza_de_date()
 {
-	if (nr_instante < 1) {
-		baza_de_date::instanta = new baza_de_date(nume);
-		nr_instante++;
+	nr_tabele = 0;
+	rapoarte_select = 0;
+	rapoarte_display = 0;
+}
+
+baza_de_date* baza_de_date::get_instanta()
+{
+	if(instanta == nullptr) 
+	{
+		baza_de_date::instanta = new baza_de_date();
+		instanta->citeste_config();
 	}
 	return instanta;
 }
 
-//functii accesor
-string baza_de_date::get_nume_bd()
+void baza_de_date::citeste_config()
 {
-	return this->nume_bd;
+	ifstream f(FISIER_CONFIGURATIE);
+	if (f.is_open())
+	{
+		int count = 0;
+		string temp;
+		getline(f, temp);
+		rapoarte_select = stoi(temp);
+		getline(f, temp);
+		rapoarte_display = stoi(temp);
+
+		while (!f.eof())
+		{
+			string nume;
+			getline(f, nume);
+			if (nume != "")
+			{
+				ifstream g(nume + ".config", ios::binary);
+
+				tabele[count++].deserializare(g);
+				g.close();
+			}
+		}
+		instanta->nr_tabele = count;
+		f.close();
+	}
+	else
+	{
+		ofstream g(FISIER_CONFIGURATIE);
+		g << "0" << endl << "0" << endl;//automat pornesc de la 0 numaratoarea pentru fisiere select si display
+		g.close();
+		citeste_config();
+	}
 }
 
+//functii accesor
 int baza_de_date::get_nr_tabele()
 {
 	return nr_tabele;
@@ -2563,15 +3010,98 @@ void baza_de_date::set_tabela(tabela t, int index)
 	tabele[index] = t;
 }
 
+//functii pt generare nume pt fisierele cu rapoarte comenzi
+string baza_de_date::get_nume_fisier_select()
+{
+	string nume = NUME_FISIER_SELECT + to_string(rapoarte_select) + ".txt";
+	rapoarte_select++;
+
+	ifstream in(FISIER_CONFIGURATIE);
+	ofstream out("temp.txt", ios::trunc);
+
+	char linie[1000];
+	if (in.is_open())
+	{
+		int i = 0;
+		while (!in.eof())
+		{
+			in >> ws;
+			in.get(linie, 999);
+			if(i==INDEX_SELECT)
+			{
+				out << rapoarte_select << endl;
+			}
+			else
+			{
+				out << linie << endl;
+			}
+			i++;
+		}
+	}
+	in.close();
+	out.close();
+	remove(FISIER_CONFIGURATIE);
+	int r = rename("temp.txt", FISIER_CONFIGURATIE);
+
+	return nume;
+}
+
+string baza_de_date::get_nume_fisier_display()
+{
+	string nume = NUME_FISIER_DISPLAY + to_string(rapoarte_display) + ".txt";
+	rapoarte_display++;
+
+	ifstream in(FISIER_CONFIGURATIE);
+	ofstream out("temp.txt", ios::trunc);
+
+	char linie[1000];
+	if (in.is_open())
+	{
+		int i = 0;
+		while (!in.eof())
+		{
+			in >> ws;
+			in.get(linie, 999);
+			if (i == INDEX_DISPLAY)
+			{
+				out << rapoarte_display << endl;
+			}
+			else
+			{
+				out << linie << endl;
+			}
+			i++;
+		}
+	}
+	in.close();
+	out.close();
+	remove(FISIER_CONFIGURATIE);
+	int r = rename("temp.txt", FISIER_CONFIGURATIE);
+
+	return nume;
+}
+
+
+
 //functii de care o sa mai am nevoie -- DDL
 void baza_de_date::adauga_tabela(tabela t)
 {
+	//trebuie sa adaug tabela in vectorul cu tabele (tabela ce are doar nume si vector de coloane);
 	this->tabele[nr_tabele] = t;
 	this->nr_tabele++;
+	//trebuie sa adaug tabela in fisierul cu numele tabelelor
+	ofstream out(FISIER_CONFIGURATIE, ios::app);
+	out << t.get_nume_tabela() << endl;
+	out.close();
+	//trebuie sa creez un fisier nou cu numele nume_tabela.config pentru serializarea coloanelor
+	out.open(t.get_nume_tabela() + ".config", ios::binary);
+	t.serializare(out);
+	out.close();	
 }
 
 void baza_de_date::sterge_tabela(const char* nume_tabela)
 {
+	//trebuie sa scot tabela din vectorul cu tabele
 	for (int i = 0; i < this->nr_tabele; i++)
 	{
 		if (_stricmp(nume_tabela, this->tabele[i].get_nume_tabela().c_str()) == 0)
@@ -2584,9 +3114,37 @@ void baza_de_date::sterge_tabela(const char* nume_tabela)
 			break; // pentru ca nu pot sa existe 2 tabele cu acelasi nume
 		}
 	}
+
+	//trebuie sa scot tabela din fisierul cu numele tabelelor
+	ifstream in(FISIER_CONFIGURATIE);
+	ofstream out("temp.txt", ios::trunc);
+
+	char linie[1000];
+	if (in.is_open())
+	{
+		while (!in.eof())
+		{
+			in >> ws;
+			in.get(linie, 999);
+
+			if (_stricmp(linie, nume_tabela) != 0)
+			{
+				out << linie << endl;
+			}
+		}
+	}
+	in.close();
+	out.close();
+	remove(FISIER_CONFIGURATIE);
+	int r = rename("temp.txt", FISIER_CONFIGURATIE);
+
+	//trebuie sa sterg fisierul cu numele nume_tabela.config 
+	remove((string(nume_tabela)+".config").c_str());
+	remove((string(nume_tabela) + ".bin").c_str());
+
 }
 
-void baza_de_date::afiseaza_tabela(const char* nume)
+void baza_de_date::afiseaza_tabela(const char* nume, int index)
 {
 	for (int i = 0; i < nr_tabele; i++)
 	{
@@ -2699,7 +3257,141 @@ void baza_de_date::listeaza_tabele()
 {
 	for (int i = 0; i < nr_tabele; i++)
 	{
-		cout << "->" << tabele[i].get_nume_tabela() << ": ";
-		cout << tabele[i].get_nr_inregistrari() << " inregistrari" << endl;
+		cout << "->" << tabele[i].get_nume_tabela() << endl;
 	}
+}
+
+//functii serializare/deserializare
+//INREGISTRARE
+void inregistrare::serializare(ofstream& f)
+{
+	int length;
+	f.write((char*)&nr_campuri, sizeof(nr_campuri));
+	for (int i = 0; i < nr_campuri; i++)
+	{
+		length = strlen(valori_campuri[i]);
+		f.write((char*)&length, sizeof(length));
+		f.write(valori_campuri[i], length + 1);
+	}
+}
+
+void inregistrare::deserializare(ifstream& f)
+{
+	int length = 0;
+	if (valori_campuri != nullptr)
+	{
+		for (int i = 0; i < nr_campuri; i++)
+		{
+			delete[] valori_campuri[i];
+		}
+		delete[] valori_campuri;
+	}
+
+	f.read((char*)&nr_campuri, sizeof(nr_campuri));
+	valori_campuri = new char* [nr_campuri];
+	for (int i = 0; i < nr_campuri; i++)
+	{
+		f.read((char*)&length, sizeof(length));
+		valori_campuri[i] = new char[length + 1];
+		f.read(valori_campuri[i], (long)length + 1);
+	}
+}
+
+//REPOSITORY
+void repository::serializeaza(ofstream& f)
+{
+	int length;
+	length = nume_fisier.length();
+
+	f.write((char*)&length, sizeof(length));
+	f.write(nume_fisier.c_str(), (long)length + 1);
+}
+
+void repository::deserializeaza(ifstream& f) 
+{
+	int length = 0;
+	f.read((char*)&length, sizeof(length));
+	char* tmp = new char[length + 1];
+	f.read(tmp, (long)length + 1);
+	nume_fisier = string(tmp);
+	delete[] tmp;
+}
+
+//COLOANA
+void coloana::serializare(ofstream& f)
+{
+	int length;
+	length = strlen(nume_coloana);
+	f.write((char*)&length, sizeof(length));
+	f.write(nume_coloana, length + 1);
+	f.write((char*)&tip_coloana, sizeof(tip_coloana));
+	length = strlen(valoare_implicita);
+	f.write((char*)&length, sizeof(length));
+	f.write(valoare_implicita, length + 1);
+	f.write((char*)&dimensiune_coloana, sizeof(dimensiune_coloana));
+}
+
+void coloana::deserializare(ifstream& f)
+{
+	if (nume_coloana != nullptr)
+	{
+		delete[] nume_coloana;
+	}
+
+	if (valoare_implicita != nullptr)
+	{
+		delete[] valoare_implicita;
+	}
+
+
+	int length = 0;
+	f.read((char*)&length, sizeof(length));
+	nume_coloana = new char[length + 1];
+	f.read(nume_coloana, (long)length + 1);
+
+	f.read((char*)&tip_coloana, sizeof(tip_coloana));
+
+	f.read((char*)&length, sizeof(length));
+	valoare_implicita = new char[length + 1];
+	f.read(valoare_implicita, (long)length + 1);
+
+	f.read((char*)&dimensiune_coloana, sizeof(dimensiune_coloana));
+	
+}
+
+//TABELA
+void tabela::serializare(ofstream& f)
+{
+	int length;
+	length = strlen(nume_tabela);
+
+	f.write((char*)&length, sizeof(length));
+	f.write(nume_tabela,(long)length + 1);
+
+	f.write((char*)&nr_coloane, sizeof(nr_coloane));
+	for (int i = 0; i < nr_coloane; i++)
+	{
+		coloane[i].serializare(f);
+	}
+	repo.serializeaza(f);
+
+}
+
+void tabela::deserializare(ifstream& f)
+{
+	if (nume_tabela != nullptr)
+	{
+		delete[] nume_tabela;
+	}
+	
+	int length = 0;
+	f.read((char*)&length, sizeof(length));
+	nume_tabela = new char[length + 1];
+	f.read(nume_tabela , (long)length + 1);
+	f.read((char*)&nr_coloane, sizeof(nr_coloane));
+	for (int i = 0; i < nr_coloane; i++)
+	{
+		coloane[i].deserializare(f);
+	}
+	repo.deserializeaza(f);
 }

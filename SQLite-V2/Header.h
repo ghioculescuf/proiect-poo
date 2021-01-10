@@ -1,12 +1,19 @@
 #pragma once
-#include <string.h>
 #include <string>
+
 
 using namespace std;
 
-//TO DO: clasa de baza coloana cu metode virtuala verifica si executa
-//TO DO: de modificat tipul de coloana din real in float
+//TO DO: clasa de baza coloana cu metode virtuala verifica si executa si sters static de la metode
+//TO DO: interfata serializabil cu 2 metode virtuale serializeaza si deserializeaza
 
+class comanda_import
+{
+public:
+	static bool verifica_sintaxa(char*);
+	static bool verifica_fisier(char*);
+	static void executa_comanda(char*);
+};
 class comanda_create
 {
 public:
@@ -56,7 +63,7 @@ public:
 	static void executa_comanda(char*);
 };
 
-enum class tip_coloane {integer, real, text, tip_nedefinit};
+enum class tip_coloane { integer, real, text, tip_nedefinit };
 
 //clasa pt o pereche nume - valoare
 class conditie
@@ -94,16 +101,21 @@ private:
 	int nr_campuri;
 	char** valori_campuri;
 public:
+	//serializare / deserializare
+	void serializare(ofstream&);
+
+	void deserializare(ifstream&);
+
 	//constructori
 	inregistrare();
 	inregistrare(int, char[100][100]);
-	
+
 	//constructor de copiere
 	inregistrare(const inregistrare&);
-	
+
 	//operator=
 	inregistrare operator=(inregistrare);
-	
+
 	//destructor
 	~inregistrare();
 
@@ -118,9 +130,9 @@ public:
 	char** get_valori();
 	void set_valoare(const char*, int);
 	string get_valoare(int index);
-	
-	void afiseaza_inregistrare(int dimensiune);
-	
+
+	void afiseaza_inregistrare(ofstream&, int);
+
 
 	//alte supraincarcari de operatori
 	bool operator!();
@@ -132,7 +144,37 @@ public:
 	char* operator[](int);
 };
 
-//clasa pt strctura unei coloane
+class repository
+{
+private:
+	string nume_fisier;
+public:
+
+	repository();
+	repository(char*);
+
+
+	void adauga(inregistrare);
+	void sterge(int, conditie);
+
+
+	void actualizeaza(int, int, conditie, conditie);
+
+	void afiseaza_toate(ofstream&, int);
+
+	void afiseaza_toate(ofstream&, int, conditie, int);
+
+	void afiseaza_partial(ofstream&, int, int[], int);
+
+	void afiseaza_partial(ofstream&, int, int[], int, int, conditie);
+
+	void serializeaza(ofstream&);
+
+	void deserializeaza(ifstream&);
+
+};
+
+//clasa pt structura unei coloane
 class coloana
 {
 private:
@@ -141,9 +183,12 @@ private:
 	char* valoare_implicita;
 	int dimensiune_coloana;
 public:
+	void serializare(ofstream&);
+	void deserializare(ifstream&);
+
 	//constructori
 	coloana();
-	coloana(const char*, tip_coloane,const char*, int);
+	coloana(const char*, tip_coloane, const char*, int);
 
 	//constructor de copiere
 	coloana(const coloana&);
@@ -176,19 +221,24 @@ class tabela
 {
 private:
 	char* nume_tabela;
-	
+
 	//de inlocuit cu vector STL
 	coloana coloane[20];
 	int nr_coloane;
-	
+
+	//pentru inregistrari;
+	repository repo;
 	//de inlocuit cu vector STL
-	inregistrare inregistrari[100];
-	int nr_inregistrari;
+	//inregistrare inregistrari[100];
+	//int nr_inregistrari;
 public:
+	//functii de serializare
+	void serializare(ofstream&);
+	void deserializare(ifstream&);
+
 	//constructori
 	tabela();
 	tabela(const char*, int, coloana[]);
-	tabela(const char*, int, coloana[], int, inregistrare[]);
 
 	//constructor de copiere
 	tabela(const tabela&);
@@ -209,18 +259,12 @@ public:
 
 	int get_nr_coloane();
 	//void set_nr_coloane(); - nu are sens
-	
+
 	coloana get_coloana(int);
 	coloana get_coloana(const char*);
 	void set_coloana(coloana, int);
 
 	int get_index_coloana(const char*);
-
-	int get_nr_inregistrari();
-	//void set_nr_inregistrari() - nu are sens
-
-	inregistrare get_inregistrare(int);
-	void set_inregistrare(inregistrare, int);
 
 
 	//alte functii
@@ -236,88 +280,76 @@ public:
 
 	//alte supraincarcari de operatori
 	bool operator!();
-
-	tabela operator--(); // tabela fara ultima inregistrare
-
-	tabela operator--(int);
-
-	tabela operator-(int);
-
 	explicit operator int();
-
-	bool operator<(tabela);
+	//tabela operator--(); // tabela fara ultima inregistrare
+	//tabela operator--(int);
+	//tabela operator-(int);
+	//bool operator<(tabela);
 };
 
 //o singura baza de date cu mai multe tabele
 class baza_de_date
 {
 private:
-	//int* nr_inregistrari_per_tabela; - sa existe un vector de int alocat dinamic
-
 	static baza_de_date* instanta;
-	const string nume_bd;
+
+	const char* FISIER_CONFIGURATIE = "config.txt";
+	const int INDEX_SELECT = 0;//primul rand din fisierul config
+	const int INDEX_DISPLAY = 1;//al doilea rand din fisierul config
+	const string NUME_FISIER_SELECT = "SELECT_";
+	const string NUME_FISIER_DISPLAY = "DISPLAY_";
+	int rapoarte_select;
+	int rapoarte_display;
+
+
 	int nr_tabele;
-	//poate contine 10 tabele si fiecare maxim 20 de coloane si 100 de inregistrari
+	//poate contine 10 tabele si fiecare maxim 20 de coloane
 	tabela tabele[10];
-	static int nr_instante;
-	baza_de_date(string nume) : nume_bd(nume)
-	{
-		nr_tabele = 0;
-	}
-	//singleton, nu cred ca e nevoie de constructor de copiere, operator= sau destructor ?????
-	//nu au sens alti operatori supraincarcati
-	
+
+	//constructor
+	baza_de_date();
+	void citeste_config();
+
 public:
-	static baza_de_date* getInstance(string);
-	
+	static baza_de_date* get_instanta();
+
 	//functii accesor
-	string get_nume_bd();
-	//void set_nume_tabela nu are sens pentru ca e constant
 	int get_nr_tabele();
-	//void set_nr_tabele nu are sens
 	tabela get_tabela(int);
 	tabela get_tabela(const char*);
-	void set_tabela(tabela,int);
-	
+	void set_tabela(tabela, int);
 
+	string get_nume_fisier_select();
+	string get_nume_fisier_display();
+	
 	//alte metode
 	void adauga_tabela(tabela);
 	void sterge_tabela(const char*);
-	void afiseaza_tabela(const char*);
+	void afiseaza_tabela(const char*,int);
 
 	//metoda pentru comenzile dml;
-	void insereaza_inregistrari(const char*,inregistrare);
+	void insereaza_inregistrari(const char*, inregistrare);
 	void sterge_inregistrari(const char*, conditie);
 	void actualizeaza_inregistrari(const char*, conditie, conditie);
 	void afiseaza_toate(const char*);
 	void afiseaza_toate(const char*, conditie);
-	void afiseaza_partial(const char*, string*,int);
-	void afiseaza_partial(const char* ,string*,int,conditie);
-	
-															 
-	//metoda de verificare cmd drop si delete
-	void listeaza_tabele();
+	void afiseaza_partial(const char*, string*, int);
+	void afiseaza_partial(const char*, string*, int, conditie);
+
 	//alte functii
 	bool exista_tabela(string);
+	void listeaza_tabele();
 };
 
 //clasa pentru: citire, formatare, analizare comanda
 class procesor_comenzi
 {
 private:
-	static baza_de_date* bd;
+	static void proceseaza_comanda(char*);
 public:
-	static void proceseaza_comanda();
+	static void citeste_comanda_fisier(const char*);
 
-	static void set_bd(baza_de_date* bd)
-	{
-		procesor_comenzi::bd = bd;
-	}
-
-	static baza_de_date* get_bd()
-	{
-		return bd;
-	}
+	static void citeste_comanda_consola();
 
 	static bool este_nume_valid(const char*);
 
@@ -330,6 +362,8 @@ public:
 	static bool este_comanda_incompleta(const char*);
 
 	static tip_coloane identifica_tip_coloana(const char*);
+
+	static tip_coloane identifica_tip_coloana_csv(const char*);
 
 	static bool este_numar_pozitiv(const char*);
 
