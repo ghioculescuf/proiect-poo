@@ -39,6 +39,10 @@ int main(int argc, char** argv)
 				break;
 			}
 		}
+		catch (exception e)
+		{
+			cout << e.what() << endl;
+		}
 	}
 }
 

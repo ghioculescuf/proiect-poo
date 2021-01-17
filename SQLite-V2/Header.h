@@ -125,7 +125,7 @@ public:
 class comanda_import : public comanda
 {
 public:
-	comanda_import(const char* c) : comanda(c){}
+	comanda_import(const char* c) : comanda(c) {}
 
 	bool verifica_sintaxa() override;
 	void executa_comanda() override;
@@ -187,11 +187,11 @@ public:
 
 	//functii accesor
 	int get_nr_campuri();
-	void set_valoare(string,unsigned int);
+	void set_valoare(string, unsigned int);
 	void set_valori(vector<string>);
 	string get_valoare(unsigned int);
 	vector<string> get_valori();
-	
+
 	//alte supraincarcari de operatori
 	bool operator!();
 	explicit operator int();
@@ -200,7 +200,7 @@ public:
 
 	//alte functii
 	void afiseaza_inregistrare(ofstream&, int);
-	
+	void scrie_rand_csv(ofstream&);
 
 
 };
@@ -213,19 +213,19 @@ public:
 	repository();
 	repository(string);
 
-	
+
 	void adauga(inregistrare);
 	void sterge(int, string);
 	void actualizeaza(int, int, string, string);
 	void afiseaza_toate(ofstream&, int);
 	void afiseaza_toate(ofstream&, int, string, int);
 	void afiseaza_partial(ofstream&, int, vector<int>);
-	void afiseaza_partial(ofstream&, int, vector<int> , int, string);
-
+	void afiseaza_partial(ofstream&, int, vector<int>, int, string);
+	void exporta_csv(ofstream&);
 
 	void serializare(ofstream&) override;
 	void deserializare(ifstream&) override;
-	
+
 
 };
 
@@ -299,7 +299,7 @@ public:
 
 	void set_nume_tabela(const char*);
 	int get_nr_coloane();
-	
+
 	//alte functii
 	void afiseaza_structura_tabela(); //pentru comanda display
 	void adauga_inregistrare(inregistrare); //pentru comanda insert
@@ -311,7 +311,7 @@ public:
 	void afiseaza_partial(vector<string>, conditie);
 	int get_index_conditie(string);
 	bool exista_coloana(string);
-	
+	void exporta_csv(ofstream&);
 	//alti operatori
 	bool operator!();
 	explicit operator int();
@@ -347,11 +347,11 @@ public:
 
 	//getter
 	tabela get_tabela(const char*);
-	
+
 	//functii pentru generat numele rapoartelor select si display
 	string get_nume_fisier_select();
 	string get_nume_fisier_display();
-	
+
 	//metode pentru comenzile DDL
 	void adauga_tabela(tabela);
 	void sterge_tabela(const char*);
@@ -369,6 +369,8 @@ public:
 	//alte functii
 	bool exista_tabela(string);
 	void listeaza_tabele();
+	void stergeti_toate_tabelele();
+
 };
 
 //clasa pentru: citire, formatare, analizare comanda
@@ -387,6 +389,8 @@ public:
 
 	static void to_upper(char*, int);
 
+	static string to_upper(string);
+
 	static char* copiere_sir(const char*);
 
 	static bool este_comanda_incompleta(const char*);
@@ -400,4 +404,20 @@ public:
 	static void trim(char*);
 
 	static tip_coloane conversie(string);
+};
+
+class meniu
+{
+private:
+	meniu() {}; //sa nu mearga instantiata
+	static void afiseaza_meniu();
+	static void afisati_numele_tabelelor();
+	static void stergeti_toate_tabelele();
+	static void afisati_inregistrarile_tabelei();
+	static void stergeti_inregistrarile_tabelei();
+	static void exportati_tabela();
+
+public:
+	static void executa_meniu();
+
 };

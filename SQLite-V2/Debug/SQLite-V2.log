@@ -1,4 +1,3 @@
 ﻿  Header.cpp
-  Source.cpp
-  Generating Code...
+C:\Users\Adrian\Desktop\proiect-poo\proiect-poo\SQLite-V2\Header.cpp(3010,20): warning C4018: '<': signed/unsigned mismatch
   SQLite-V2.vcxproj -> C:\Users\Adrian\Desktop\proiect-poo\proiect-poo\SQLite-V2\Debug\SQLite-V2.exe

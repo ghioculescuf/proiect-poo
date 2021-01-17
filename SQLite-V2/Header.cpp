@@ -633,7 +633,7 @@ void comanda_delete::executa_comanda()
 
 	token = strtok_s(nullptr, " ", &context); //WHERE
 	token = strtok_s(nullptr, "=", &context);
-	
+
 	tip_coloane tip_valoare = procesor_comenzi::identifica_tip_coloana(context);
 	if (tip_valoare == tip_coloane::text)
 	{
@@ -793,7 +793,7 @@ void comanda_update::executa_comanda()
 	token = strtok_s(nullptr, "=", &context);
 	procesor_comenzi::to_upper(token);
 	c1.set_nume_coloana(token);
-	
+
 
 	token = strtok_s(nullptr, " ", &context);
 
@@ -991,7 +991,7 @@ void comanda_select::executa_comanda()
 
 		char* token = nullptr;
 		char* context = nullptr;
-		
+
 		token = strtok_s(sir_executie, " (),", &context);
 		while (token != nullptr)
 		{
@@ -1556,6 +1556,17 @@ void inregistrare::afiseaza_inregistrare(ofstream& out, int dimensiune)
 	out << endl;
 }
 
+void inregistrare::scrie_rand_csv(ofstream& out)
+{
+	for (unsigned int i = 0; i < valori_campuri.size() - 1; i++)
+	{
+		
+		out << valori_campuri[i] << ",";
+	}
+	out << valori_campuri[valori_campuri.size() - 1]<<endl;
+	out << endl;
+}
+
 
 //REPOSITORY
 repository::repository() {}
@@ -1627,6 +1638,25 @@ void repository::actualizeaza(int index_cu, int index_cw, string v1, string v2)
 		remove(nume_fisier.c_str());
 		int r = rename("temp.bin", nume_fisier.c_str());
 	}
+}
+
+void repository::exporta_csv(ofstream& out)
+{
+	ifstream f(nume_fisier, ios::binary);
+	if (!f.is_open())
+	{
+		return;
+	}
+	while (!f.eof())
+	{
+		inregistrare obj;
+		obj.deserializare(f);
+		if (obj.get_nr_campuri() != 0)
+		{
+			obj.scrie_rand_csv(out);
+		}
+	}
+	f.close();
 }
 
 void repository::afiseaza_toate(ofstream& out, int dimensiune)
@@ -2084,14 +2114,14 @@ tabela::tabela(const char* nume, list<coloana> col) : tabela()
 		repo = repository(nume_tabela);
 	}
 
-	coloane = col;	
+	coloane = col;
 }
 
 //operatori de citire si afisare consola
 ostream& operator<<(ostream& out, tabela t)
 {
 	out << "Nume tabela: " << t.nume_tabela << endl;
-	
+
 	if (t.coloane.size() > 0)
 	{
 		out << "Coloane:" << endl;
@@ -2106,7 +2136,7 @@ ostream& operator<<(ostream& out, tabela t)
 istream& operator>>(istream& in, tabela& t)
 {
 	in >> ws;
-	getline(in,t.nume_tabela);
+	getline(in, t.nume_tabela);
 
 	cout << "Dati nr de coloane: ";
 	int nr_coloane;
@@ -2168,7 +2198,7 @@ void tabela::deserializare(ifstream& f)
 string tabela::get_nume_tabela()
 {
 	return nume_tabela;
-	
+
 }
 
 coloana tabela::get_coloana(unsigned int index)
@@ -2438,6 +2468,11 @@ int tabela::get_index_conditie(string nume_col)
 	return index;
 }
 
+void tabela::exporta_csv(ofstream& out)
+{
+	repo.exporta_csv(out);
+}
+
 //trebuie facut to upper inainte pe parametru
 bool tabela::exista_coloana(string nume_col)
 {
@@ -2516,7 +2551,7 @@ void baza_de_date::citeste_config()
 
 baza_de_date* baza_de_date::get_instanta()
 {
-	if(instanta == nullptr) 
+	if (instanta == nullptr)
 	{
 		baza_de_date::instanta = new baza_de_date();
 		instanta->citeste_config();
@@ -2550,7 +2585,7 @@ string baza_de_date::get_nume_fisier_select()
 		{
 			in >> ws;
 			in.get(linie, 999);
-			if(i==INDEX_SELECT)
+			if (i == INDEX_SELECT)
 			{
 				out << rapoarte_select << endl;
 			}
@@ -2608,20 +2643,20 @@ string baza_de_date::get_nume_fisier_display()
 //functii DDL
 void baza_de_date::adauga_tabela(tabela t)
 {
-	tabele.insert(pair<string,tabela>(t.get_nume_tabela(),t));
-	
+	tabele.insert(pair<string, tabela>(t.get_nume_tabela(), t));
+
 	//fisier cu numele tabelelor
 	ofstream out(FISIER_CONFIGURATIE, ios::app);
 	out << t.get_nume_tabela() << endl;
 	out.close();
-	
+
 	//fisier cu structura coloanelor
 	out.open(t.get_nume_tabela() + ".config", ios::binary);
 	t.serializare(out);
 	out.close();
-	
+
 	//fisier cu date
-	out.open(t.get_nume_tabela() + ".bin", ios::binary|ios::trunc);
+	out.open(t.get_nume_tabela() + ".bin", ios::binary | ios::trunc);
 	out.close();
 }
 
@@ -2653,7 +2688,7 @@ void baza_de_date::sterge_tabela(const char* nume_tabela)
 	int r = rename("temp.txt", FISIER_CONFIGURATIE);
 
 	//sterg fisierele cu structura coloanelor si cu inregistrari 
-	remove((string(nume_tabela)+".config").c_str());
+	remove((string(nume_tabela) + ".config").c_str());
 	remove((string(nume_tabela) + ".bin").c_str());
 
 }
@@ -2741,12 +2776,19 @@ bool baza_de_date::exista_tabela(string nume)
 
 void baza_de_date::listeaza_tabele()
 {
-	for (auto it = tabele.begin(); it!=tabele.end();it++)
+	for (auto it = tabele.begin(); it != tabele.end(); it++)
 	{
 		cout << "->" << it->first << endl;
 	}
 }
 
+void baza_de_date::stergeti_toate_tabelele()
+{
+	for (auto it = tabele.begin(); it != tabele.end(); it++)
+	{
+		sterge_tabela(it->first.c_str());
+	}
+}
 
 
 //PROCESOR COMENZI
@@ -2874,6 +2916,10 @@ void procesor_comenzi::proceseaza_comanda(char* sir)
 		{
 			baza_de_date::get_instanta()->listeaza_tabele();
 		}
+		else if (_stricmp(token, "MENU") == 0)
+		{
+			meniu::executa_meniu();
+		}
 		else
 		{
 			cout << "Nu recunosc comanda: " << token << endl;
@@ -2957,6 +3003,18 @@ void procesor_comenzi::to_upper(char* text, int lungime)
 			text[i] -= 32;
 		}
 	}
+}
+
+string procesor_comenzi::to_upper(string s)
+{
+	for (int i = 0; i < s.length(); i++)
+	{
+		if(s[i]>='a' && s[i]<='z')
+		{
+			s[i] -= 32;
+		}
+	}
+	return s;
 }
 
 //realizeaza o copie a sirului primit ca si parametru ce ulterior va trebui dezalocata din afara functiei
@@ -3101,4 +3159,125 @@ tip_coloane procesor_comenzi::conversie(string s)
 		return tip_coloane::real;
 	}
 	return tip_coloane::tip_nedefinit;
+}
+
+void meniu::afiseaza_meniu()
+{
+	cout << "1.Afisati numele tabelelor" << endl;
+	cout << "2.Stergeti toate tabelele" << endl;
+	cout << "3.Afisati inregistrarile unei tabele" << endl;
+	cout << "4.Eliminati toate inregistrarile unei tabele" << endl;
+	cout << "5.Exportati o tabela in format csv" << endl;
+	cout << "0.Iesire meniu" << endl;
+	cout << "Alegeti o comanda din cele de mai sus: ";
+}
+
+void meniu::afisati_numele_tabelelor()
+{
+	baza_de_date::get_instanta()->listeaza_tabele();
+	cout << endl;
+}
+
+void meniu::stergeti_toate_tabelele()
+{
+	//baza_de_date::get_instanta()->stergeti_toate_tabelele();
+	cout <<"TO DO"<< endl;
+}
+
+void meniu::afisati_inregistrarile_tabelei()
+{
+	string in;
+	cout << "Dati denumirea tabelei: ";
+	cin >> ws;
+	getline(cin, in);
+	in = procesor_comenzi::to_upper(in);
+	if (baza_de_date::get_instanta()->exista_tabela(in))
+	{
+		baza_de_date::get_instanta()->afiseaza_toate(in.c_str());
+	}
+	else
+	{
+		cout << "Tabela " << in << " nu exista";
+	}
+}
+
+void meniu::stergeti_inregistrarile_tabelei()
+{
+	/*string in;
+	cout << "Dati denumirea tabelei: ";
+	cin >> ws;
+	getline(cin, in);
+	in = procesor_comenzi::to_upper(in);
+	if (baza_de_date::get_instanta()->exista_tabela(in))
+	{
+		ifstream f((in + ".bin"), ios::trunc);
+		f.close();
+	}
+	else
+	{
+		cout << "Tabela " << in << " nu exista";
+	}
+	*/
+	cout << "TO DO" << endl;
+}
+
+void meniu::exportati_tabela()
+{
+	string in;
+	cout << "Dati denumirea tabelei: ";
+	cin >> ws;
+	getline(cin, in);
+	in = procesor_comenzi::to_upper(in);
+	if (baza_de_date::get_instanta()->exista_tabela(in))
+	{
+		ofstream f((in + "_export.csv"), ios::trunc);
+		tabela t = baza_de_date::get_instanta()->get_tabela(in.c_str());
+		t.exporta_csv(f);
+		cout << endl << "Datele au fost exportate" << endl;
+		f.close();
+	}
+	else
+	{
+		cout << "Tabela " << in << " nu exista";
+	}
+}
+
+void meniu::executa_meniu()
+{
+	bool exit = false;
+	while (!exit)
+	{
+		meniu::afiseaza_meniu();
+		char c;
+		cin >> ws;
+		cin.get(c);
+		bool ok = true;
+		do {
+			switch (c)
+			{
+			case '1':
+				meniu::afisati_numele_tabelelor();
+				break;
+			case '2':
+				meniu::stergeti_toate_tabelele();
+				break;
+			case '3':
+				meniu::afisati_inregistrarile_tabelei();
+				break;
+			case '4':
+				meniu::stergeti_inregistrarile_tabelei();
+				break;
+			case '5':
+				meniu::exportati_tabela();
+				break;
+			case '0':
+				exit = true;
+				break;
+			default:
+				cout << "Optiunea aleasa nu exista" << endl;
+				meniu::afiseaza_meniu();
+				break;
+			}
+		} while (ok == false);
+	}
 }
