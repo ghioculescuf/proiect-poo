@@ -194,7 +194,7 @@ public:
 	coloana(const coloana&);
 
 	//operator=
-	coloana operator=(coloana);
+	coloana& operator=(const coloana&);
 
 	//destructor
 	~coloana();
@@ -221,16 +221,12 @@ class tabela
 {
 private:
 	char* nume_tabela;
-
 	//de inlocuit cu vector STL
-	coloana coloane[20];
 	int nr_coloane;
-
+	coloana* coloane;
 	//pentru inregistrari;
 	repository repo;
-	//de inlocuit cu vector STL
-	//inregistrare inregistrari[100];
-	//int nr_inregistrari;
+	
 public:
 	//functii de serializare
 	void serializare(ofstream&);
@@ -244,7 +240,7 @@ public:
 	tabela(const tabela&);
 
 	//operator=
-	tabela operator=(tabela);
+	tabela& operator=(const tabela&);
 
 	//destructor
 	~tabela();

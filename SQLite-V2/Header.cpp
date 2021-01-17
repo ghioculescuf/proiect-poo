@@ -75,6 +75,19 @@ void procesor_comenzi::proceseaza_comanda(char* comanda)
 	{
 		context[n - 1] = '\0';
 	}
+	
+	//SCOT SPATIILE DE DUPA VIRGULA
+	n = strlen(context);
+	for (int i = 0; i < n - 1; i++)
+	{
+		if (context[i] == ',' && context[i + 1] == ' ')
+		{
+			strcpy_s(context + i + 1, n - i - 1, context + i + 2);
+			i--;
+			n--;
+		}
+	}
+
 
 	//COPIEZ SIRUL CA SA NU IL DISTRUG PE CEL INITIAL
 	char* copie_sir = procesor_comenzi::copiere_sir(context);
@@ -393,7 +406,10 @@ bool comanda_import::verifica_sintaxa(char* c)
 		return false;
 	}
 	char aux[5];
-	strcpy_s(aux, 5, context + strlen(context) - 4);
+	if (context != nullptr)
+	{
+		strcpy_s(aux, 5, context + strlen(context) - 4);
+	}
 	procesor_comenzi::to_upper(aux);
 	if (strcmp(aux, ".CSV"))
 	{
@@ -1929,6 +1945,10 @@ char* inregistrare::operator[](int index)
 	{
 		return valori_campuri[index];
 	}
+	else
+	{
+		throw exception("Se incearca citire in afara limitelor");
+	}
 }
 
 
@@ -2191,7 +2211,7 @@ coloana::coloana(const coloana& c)
 	}
 }
 
-coloana coloana::operator=(coloana c)
+coloana& coloana::operator=(const coloana& c)
 {
 	if (this->nume_coloana != nullptr)
 	{
@@ -2414,6 +2434,7 @@ tabela::tabela()
 {
 	nume_tabela = nullptr;
 	nr_coloane = 0;
+	coloane = nullptr;
 	repo = repository();
 }
 
@@ -2423,15 +2444,17 @@ tabela::tabela(const char* nume, int nr_c, coloana col[]) : tabela()
 	{
 		this->nume_tabela = new char[strlen(nume) + 1];
 		strcpy_s(this->nume_tabela, strlen(nume) + 1, nume);
+		repo = repository(nume_tabela);
 	}
-	if (nr_c > 0)
+	if (nr_c > 0 && col != nullptr)
 	{
 		this->nr_coloane = nr_c;
+		this->coloane = new coloana[nr_c];
 		for (int i = 0; i < nr_c; i++)
+		{
 			this->coloane[i] = col[i];
+		}
 	}
-
-	repo = repository(nume_tabela);
 }
 
 
@@ -2449,11 +2472,14 @@ tabela::tabela(const tabela& t)
 		this->nume_tabela = nullptr;
 	}
 
-	if (t.nr_coloane > 0)
+	if (t.nr_coloane > 0 && t.coloane != nullptr)
 	{
 		this->nr_coloane = t.nr_coloane;
+		this->coloane = new coloana[nr_coloane];
 		for (int i = 0; i < t.nr_coloane; i++)
+		{
 			this->coloane[i] = t.coloane[i];
+		}
 	}
 	else
 	{
@@ -2463,7 +2489,7 @@ tabela::tabela(const tabela& t)
 	this->repo = t.repo;
 }
 
-tabela tabela::operator=(tabela t)
+tabela& tabela::operator=(const tabela& t)
 {
 	if (nume_tabela != nullptr)
 	{
@@ -2481,9 +2507,16 @@ tabela tabela::operator=(tabela t)
 		this->nume_tabela = nullptr;
 	}
 
-	if (t.nr_coloane > 0)
+	if (this->coloane != nullptr)
+	{
+		delete[] this->coloane;
+		this->nr_coloane = 0;
+	}
+
+	if (t.nr_coloane > 0 &&  t.coloane!=nullptr)
 	{
 		this->nr_coloane = t.nr_coloane;
+		this->coloane = new coloana[nr_coloane];
 		for (int i = 0; i < t.nr_coloane; i++)
 			this->coloane[i] = t.coloane[i];
 	}
@@ -2492,7 +2525,7 @@ tabela tabela::operator=(tabela t)
 		this->nr_coloane = 0;
 	}
 
-	this->repo = repo;
+	this->repo = t.repo;
 
 	return *this;
 }
@@ -2502,6 +2535,10 @@ tabela::~tabela()
 	if (nume_tabela != nullptr)
 	{
 		delete[] nume_tabela;
+	}
+	if (coloane != nullptr)
+	{
+		delete[] coloane;
 	}
 }
 
@@ -2532,6 +2569,16 @@ istream& operator>>(istream& in, tabela& t)
 
 	cout << "Dati nr de coloane: ";
 	in >> t.nr_coloane;
+
+	if (t.coloane != nullptr)
+	{
+		delete[] t.coloane;
+	}
+
+	if (t.nr_coloane > 0)
+	{
+		t.coloane = new coloana[t.nr_coloane];
+	}
 
 	for (int i = 0; i < t.nr_coloane; i++)
 	{
@@ -2573,7 +2620,14 @@ int tabela::get_nr_coloane()
 coloana tabela::get_coloana(int index)
 {
 	//validare pentru index sa existe; sa fie mai mic decat nr_c
-	return coloane[index];
+	if (index >= 0 && index <= nr_coloane)
+	{
+		return coloane[index];
+	}
+	else
+	{
+		throw exception("Se incearca citirea din afara limitelor vectorului");
+	}
 }
 
 coloana tabela::get_coloana(const char* nume_coloana)
@@ -2588,13 +2642,20 @@ coloana tabela::get_coloana(const char* nume_coloana)
 			}
 		}
 	}
-	return coloana();
+	throw exception(("Nu exista coloana" + string(nume_coloana)).c_str());
 }
 
 void tabela::set_coloana(coloana c, int index)
 {
 	//validare sa fie nrc intre 1 si 10
-	coloane[index] = c;
+	if (index >= 0 && index <= nr_coloane)
+	{
+		coloane[index] = c;
+	}
+	else 
+	{
+		throw exception("Se incearca modificarea unei valori din exteriorul vectorului");
+	}
 }
 
 int tabela::get_index_coloana(const char* nume_coloana)
@@ -3096,7 +3157,9 @@ void baza_de_date::adauga_tabela(tabela t)
 	//trebuie sa creez un fisier nou cu numele nume_tabela.config pentru serializarea coloanelor
 	out.open(t.get_nume_tabela() + ".config", ios::binary);
 	t.serializare(out);
-	out.close();	
+	out.close();
+	out.open(t.get_nume_tabela() + ".bin", ios::binary|ios::trunc);
+	out.close();
 }
 
 void baza_de_date::sterge_tabela(const char* nume_tabela)
@@ -3265,19 +3328,19 @@ void baza_de_date::listeaza_tabele()
 //INREGISTRARE
 void inregistrare::serializare(ofstream& f)
 {
-	int length;
+	long length;
 	f.write((char*)&nr_campuri, sizeof(nr_campuri));
 	for (int i = 0; i < nr_campuri; i++)
 	{
 		length = strlen(valori_campuri[i]);
 		f.write((char*)&length, sizeof(length));
-		f.write(valori_campuri[i], length + 1);
+		f.write(valori_campuri[i], length + 1L);
 	}
 }
 
 void inregistrare::deserializare(ifstream& f)
 {
-	int length = 0;
+	long length = 0;
 	if (valori_campuri != nullptr)
 	{
 		for (int i = 0; i < nr_campuri; i++)
@@ -3293,26 +3356,26 @@ void inregistrare::deserializare(ifstream& f)
 	{
 		f.read((char*)&length, sizeof(length));
 		valori_campuri[i] = new char[length + 1];
-		f.read(valori_campuri[i], (long)length + 1);
+		f.read(valori_campuri[i], length + 1L);
 	}
 }
 
 //REPOSITORY
 void repository::serializeaza(ofstream& f)
 {
-	int length;
+	long length;
 	length = nume_fisier.length();
 
 	f.write((char*)&length, sizeof(length));
-	f.write(nume_fisier.c_str(), (long)length + 1);
+	f.write(nume_fisier.c_str(), length + 1L);
 }
 
 void repository::deserializeaza(ifstream& f) 
 {
-	int length = 0;
+	long length = 0;
 	f.read((char*)&length, sizeof(length));
 	char* tmp = new char[length + 1];
-	f.read(tmp, (long)length + 1);
+	f.read(tmp, length + 1L);
 	nume_fisier = string(tmp);
 	delete[] tmp;
 }
@@ -3320,14 +3383,14 @@ void repository::deserializeaza(ifstream& f)
 //COLOANA
 void coloana::serializare(ofstream& f)
 {
-	int length;
+	long length;
 	length = strlen(nume_coloana);
 	f.write((char*)&length, sizeof(length));
-	f.write(nume_coloana, length + 1);
+	f.write(nume_coloana, length + 1L);
 	f.write((char*)&tip_coloana, sizeof(tip_coloana));
 	length = strlen(valoare_implicita);
 	f.write((char*)&length, sizeof(length));
-	f.write(valoare_implicita, length + 1);
+	f.write(valoare_implicita, length + 1L);
 	f.write((char*)&dimensiune_coloana, sizeof(dimensiune_coloana));
 }
 
@@ -3344,16 +3407,16 @@ void coloana::deserializare(ifstream& f)
 	}
 
 
-	int length = 0;
+	long length = 0;
 	f.read((char*)&length, sizeof(length));
 	nume_coloana = new char[length + 1];
-	f.read(nume_coloana, (long)length + 1);
+	f.read(nume_coloana, length + 1L);
 
 	f.read((char*)&tip_coloana, sizeof(tip_coloana));
 
 	f.read((char*)&length, sizeof(length));
 	valoare_implicita = new char[length + 1];
-	f.read(valoare_implicita, (long)length + 1);
+	f.read(valoare_implicita, length + 1L);
 
 	f.read((char*)&dimensiune_coloana, sizeof(dimensiune_coloana));
 	
@@ -3362,11 +3425,11 @@ void coloana::deserializare(ifstream& f)
 //TABELA
 void tabela::serializare(ofstream& f)
 {
-	int length;
+	long length;
 	length = strlen(nume_tabela);
 
 	f.write((char*)&length, sizeof(length));
-	f.write(nume_tabela,(long)length + 1);
+	f.write(nume_tabela,length + 1L);
 
 	f.write((char*)&nr_coloane, sizeof(nr_coloane));
 	for (int i = 0; i < nr_coloane; i++)
@@ -3384,11 +3447,15 @@ void tabela::deserializare(ifstream& f)
 		delete[] nume_tabela;
 	}
 	
-	int length = 0;
+	long length = 0;
 	f.read((char*)&length, sizeof(length));
 	nume_tabela = new char[length + 1];
-	f.read(nume_tabela , (long)length + 1);
+	f.read(nume_tabela , length + 1L);
 	f.read((char*)&nr_coloane, sizeof(nr_coloane));
+	if (nr_coloane > 0)
+	{
+		coloane = new coloana[nr_coloane];
+	}
 	for (int i = 0; i < nr_coloane; i++)
 	{
 		coloane[i].deserializare(f);

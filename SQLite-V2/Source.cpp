@@ -4,15 +4,7 @@ using namespace std;
 
 int main(int argc, char** argv)
 {
-
-
 	//configuratie
-	//cand accesez de la comanda vreau sa merg in dir parinte;
-	//if (argc != 1)
-	//{
-	//	system("cd ..");
-	//}
-
 	baza_de_date* bd = baza_de_date::get_instanta();
 	
 	//fisiere text din linia de comanda
@@ -46,10 +38,6 @@ int main(int argc, char** argv)
 				cout << "Cod de eroare necunoscut: " << e << endl;
 				break;
 			}
-		}
-		catch (exception e)
-		{
-			cout << "Exceptie: " << e.what() << endl;
 		}
 	}
 }
