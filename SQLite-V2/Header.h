@@ -1,67 +1,140 @@
 #pragma once
 #include <string>
-
+#include <vector>
+#include <set>
+#include <list>
+#include <map>
 
 using namespace std;
 
-//TO DO: clasa de baza coloana cu metode virtuala verifica si executa si sters static de la metode
-//TO DO: interfata serializabil cu 2 metode virtuale serializeaza si deserializeaza
-
-class comanda_import
+//INTERFETE
+class verificabil
 {
 public:
-	static bool verifica_sintaxa(char*);
+	virtual bool verifica_sintaxa() = 0;
+};
+
+class executabil
+{
+public:
+	virtual void executa_comanda() = 0;
+};
+
+class serializabil
+{
+public:
+	virtual void serializare(ofstream&) = 0;
+	virtual void deserializare(ifstream&) = 0;
+};
+
+//CLASA ABSTRACTA
+class comanda : public verificabil, public executabil
+{
+protected:
+	char* sir_verificare;
+	char* sir_executie;
+public:
+	comanda();
+	comanda(const char* c);
+
+	comanda(const comanda&) = delete;
+	comanda& operator= (const comanda&) = delete;
+
+	virtual ~comanda();
+
+};
+
+
+class comanda_create : public comanda
+{
+public:
+	comanda_create(const char* c) : comanda(c) {}
+	bool verifica_sintaxa() override;
+	void executa_comanda() override;
+
+	comanda_create(const comanda_create&) = delete;
+	comanda_create& operator= (const comanda_create&) = delete;
+};
+
+class comanda_drop : public comanda
+{
+public:
+	comanda_drop(const char* c) : comanda(c) {}
+	bool verifica_sintaxa() override;
+	void executa_comanda() override;
+
+	comanda_drop(const comanda_drop&) = delete;
+	comanda_drop& operator= (const comanda_drop&) = delete;
+};
+
+class comanda_display : public comanda
+{
+public:
+	comanda_display(const char* c) : comanda(c) {}
+	bool verifica_sintaxa() override;
+	void executa_comanda() override;
+
+	comanda_display(const comanda_display&) = delete;
+	comanda_display& operator= (const comanda_display&) = delete;
+};
+
+class comanda_insert : public comanda
+{
+public:
+	comanda_insert(const char* c) : comanda(c) {}
+	bool verifica_sintaxa() override;
+	void executa_comanda() override;
+
+	comanda_insert(const comanda_insert&) = delete;
+	comanda_insert& operator= (const comanda_insert&) = delete;
+};
+
+class comanda_delete : public comanda
+{
+public:
+	comanda_delete(const char* c) : comanda(c) {}
+	bool verifica_sintaxa() override;
+	void executa_comanda() override;
+
+	comanda_delete(const comanda_delete&) = delete;
+	comanda_delete& operator= (const comanda_delete&) = delete;
+};
+
+class comanda_update : public comanda
+{
+public:
+	comanda_update(const char* c) : comanda(c) {}
+	bool verifica_sintaxa() override;
+	void executa_comanda() override;
+
+	comanda_update(const comanda_update&) = delete;
+	comanda_update& operator= (const comanda_update&) = delete;
+};
+
+class comanda_select : public comanda
+{
+public:
+	comanda_select(const char* c) : comanda(c) {}
+	bool verifica_sintaxa() override;
+	void executa_comanda() override;
+
+	comanda_select(const comanda_select&) = delete;
+	comanda_select& operator= (const comanda_select&) = delete;
+};
+
+class comanda_import : public comanda
+{
+public:
+	comanda_import(const char* c) : comanda(c){}
+
+	bool verifica_sintaxa() override;
+	void executa_comanda() override;
 	static bool verifica_fisier(char*);
-	static void executa_comanda(char*);
-};
-class comanda_create
-{
-public:
-	static bool verifica_sintaxa(char*);
-	static void executa_comanda(char*);
+
+	comanda_import(const comanda_import&) = delete;
+	comanda_import& operator= (const comanda_import&) = delete;
 };
 
-class comanda_drop
-{
-public:
-	static bool verifica_sintaxa(char*);
-	static void executa_comanda(char*);
-};
-
-class comanda_display
-{
-public:
-	static bool verifica_sintaxa(char*);
-	static void executa_comanda(char*);
-};
-
-class comanda_select
-{
-public:
-	static bool verifica_sintaxa(char*);
-	static void executa_comanda(char*);
-};
-
-class comanda_delete
-{
-public:
-	static bool verifica_sintaxa(char*);
-	static void executa_comanda(char*);
-};
-
-class comanda_update
-{
-public:
-	static bool verifica_sintaxa(char*);
-	static void executa_comanda(char*);
-};
-
-class comanda_insert
-{
-public:
-	static bool verifica_sintaxa(char*);
-	static void executa_comanda(char*);
-};
 
 enum class tip_coloane { integer, real, text, tip_nedefinit };
 
@@ -91,91 +164,73 @@ public:
 	void set_nume_coloana(const char*);
 	string get_valoare_coloana();
 	void set_valoare_coloana(const char*);
-
 };
 
 //clasa pt un rand din tabela
-class inregistrare
+class inregistrare : public serializabil
 {
 private:
-	int nr_campuri;
-	char** valori_campuri;
+	vector<string> valori_campuri;
 public:
-	//serializare / deserializare
-	void serializare(ofstream&);
-
-	void deserializare(ifstream&);
-
 	//constructori
 	inregistrare();
+	inregistrare(vector<string> v);
 	inregistrare(int, char[100][100]);
-
-	//constructor de copiere
-	inregistrare(const inregistrare&);
-
-	//operator=
-	inregistrare operator=(inregistrare);
-
-	//destructor
-	~inregistrare();
 
 	//functii de citire si afisare
 	friend istream& operator>>(istream&, inregistrare&);
 	friend ostream& operator<<(ostream&, inregistrare);
 
-	//functii accesor -- nu are sens un setter pentru numarul de campuri
+	//functii fisiere binare
+	void serializare(ofstream&) override;
+	void deserializare(ifstream&) override;
+
+	//functii accesor
 	int get_nr_campuri();
-
-	void set_valori(char**, int);
-	char** get_valori();
-	void set_valoare(const char*, int);
-	string get_valoare(int index);
-
-	void afiseaza_inregistrare(ofstream&, int);
-
-
+	void set_valoare(string,unsigned int);
+	void set_valori(vector<string>);
+	string get_valoare(unsigned int);
+	vector<string> get_valori();
+	
 	//alte supraincarcari de operatori
 	bool operator!();
-
 	explicit operator int();
-
 	bool operator>=(inregistrare);
+	string operator[](unsigned int);
 
-	char* operator[](int);
+	//alte functii
+	void afiseaza_inregistrare(ofstream&, int);
+	
+
+
 };
 
-class repository
+class repository : public serializabil
 {
 private:
 	string nume_fisier;
 public:
-
 	repository();
-	repository(char*);
+	repository(string);
 
-
+	
 	void adauga(inregistrare);
-	void sterge(int, conditie);
-
-
-	void actualizeaza(int, int, conditie, conditie);
-
+	void sterge(int, string);
+	void actualizeaza(int, int, string, string);
 	void afiseaza_toate(ofstream&, int);
+	void afiseaza_toate(ofstream&, int, string, int);
+	void afiseaza_partial(ofstream&, int, vector<int>);
+	void afiseaza_partial(ofstream&, int, vector<int> , int, string);
 
-	void afiseaza_toate(ofstream&, int, conditie, int);
 
-	void afiseaza_partial(ofstream&, int, int[], int);
-
-	void afiseaza_partial(ofstream&, int, int[], int, int, conditie);
-
-	void serializeaza(ofstream&);
-
-	void deserializeaza(ifstream&);
+	void serializare(ofstream&) override;
+	void deserializare(ifstream&) override;
+	
 
 };
 
 //clasa pt structura unei coloane
-class coloana
+class coloana : public serializabil
 {
 private:
 	char* nume_coloana;
@@ -183,9 +238,6 @@ private:
 	char* valoare_implicita;
 	int dimensiune_coloana;
 public:
-	void serializare(ofstream&);
-	void deserializare(ifstream&);
-
 	//constructori
 	coloana();
 	coloana(const char*, tip_coloane, const char*, int);
@@ -203,6 +255,10 @@ public:
 	friend ostream& operator<< (ostream&, coloana);
 	friend istream& operator>>(istream&, coloana&);
 
+	//functii fisiere binare
+	void serializare(ofstream&) override;
+	void deserializare(ifstream&) override;
+
 	//functii accesor
 	string get_nume_coloana();
 	void set_nume_coloana(const char*);
@@ -217,70 +273,50 @@ public:
 	void set_dimensiune_coloana(int);
 };
 
-class tabela
+class tabela : serializabil
 {
 private:
-	char* nume_tabela;
-	//de inlocuit cu vector STL
-	int nr_coloane;
-	coloana* coloane;
-	//pentru inregistrari;
-	repository repo;
-	
+	string nume_tabela;
+	list<coloana> coloane;	//lista cu structura coloanelor
+	repository repo;		//repo unde se afla inregistrarile din tabela
 public:
-	//functii de serializare
-	void serializare(ofstream&);
-	void deserializare(ifstream&);
-
 	//constructori
 	tabela();
-	tabela(const char*, int, coloana[]);
-
-	//constructor de copiere
-	tabela(const tabela&);
-
-	//operator=
-	tabela& operator=(const tabela&);
-
-	//destructor
-	~tabela();
+	tabela(const char*, list<coloana>);
 
 	//operatori de citire si afisare consola
 	friend ostream& operator<<(ostream&, tabela);
 	friend istream& operator>>(istream&, tabela&);
 
+	//functii de serializare
+	void serializare(ofstream&) override;
+	void deserializare(ifstream&) override;
+
 	//functii accesor
 	string get_nume_tabela();
+	coloana get_coloana(unsigned int);
+	coloana get_coloana(string);
+
 	void set_nume_tabela(const char*);
-
 	int get_nr_coloane();
-	//void set_nr_coloane(); - nu are sens
-
-	coloana get_coloana(int);
-	coloana get_coloana(const char*);
-	void set_coloana(coloana, int);
-
-	int get_index_coloana(const char*);
-
-
+	
 	//alte functii
 	void afiseaza_structura_tabela(); //pentru comanda display
 	void adauga_inregistrare(inregistrare); //pentru comanda insert
 	void sterge_inregistrare(conditie);	//pentru comanda delete
 	void actualizeaza_inregistrare(conditie, conditie); //pentru comanda update
-	bool exista_coloana(string);
 	void afiseaza_toate();
 	void afiseaza_toate(conditie);
-	void afiseaza_partial(string*, int);
-	void afiseaza_partial(string*, int, conditie);
-
-	//alte supraincarcari de operatori
+	void afiseaza_partial(vector<string>);
+	void afiseaza_partial(vector<string>, conditie);
+	int get_index_conditie(string);
+	bool exista_coloana(string);
+	
+	//alti operatori
 	bool operator!();
 	explicit operator int();
-	//tabela operator--(); // tabela fara ultima inregistrare
-	//tabela operator--(int);
-	//tabela operator-(int);
-	//bool operator<(tabela);
+	friend bool operator<(tabela, tabela);
+
 };
 
 //o singura baza de date cu mai multe tabele
@@ -288,49 +324,47 @@ class baza_de_date
 {
 private:
 	static baza_de_date* instanta;
+	map<string, tabela> tabele; //are numele si tabela asociata
 
 	const char* FISIER_CONFIGURATIE = "config.txt";
-	const int INDEX_SELECT = 0;//primul rand din fisierul config
-	const int INDEX_DISPLAY = 1;//al doilea rand din fisierul config
+	const int INDEX_SELECT = 0;		//primul rand din fisierul config
+	const int INDEX_DISPLAY = 1;	//al doilea rand din fisierul config
 	const string NUME_FISIER_SELECT = "SELECT_";
 	const string NUME_FISIER_DISPLAY = "DISPLAY_";
 	int rapoarte_select;
 	int rapoarte_display;
 
-
-	int nr_tabele;
-	//poate contine 10 tabele si fiecare maxim 20 de coloane
-	tabela tabele[10];
-
 	//constructor
 	baza_de_date();
 	void citeste_config();
 
+	//operator egal si constructor de copiere
+	baza_de_date(const baza_de_date&) = delete;
+	baza_de_date& operator=(const baza_de_date&) = delete;
+
 public:
 	static baza_de_date* get_instanta();
 
-	//functii accesor
-	int get_nr_tabele();
-	tabela get_tabela(int);
+	//getter
 	tabela get_tabela(const char*);
-	void set_tabela(tabela, int);
-
+	
+	//functii pentru generat numele rapoartelor select si display
 	string get_nume_fisier_select();
 	string get_nume_fisier_display();
 	
-	//alte metode
+	//metode pentru comenzile DDL
 	void adauga_tabela(tabela);
 	void sterge_tabela(const char*);
-	void afiseaza_tabela(const char*,int);
+	void afiseaza_tabela(const char*);
 
-	//metoda pentru comenzile dml;
+	//metoda pentru comenzile DML
 	void insereaza_inregistrari(const char*, inregistrare);
 	void sterge_inregistrari(const char*, conditie);
 	void actualizeaza_inregistrari(const char*, conditie, conditie);
 	void afiseaza_toate(const char*);
 	void afiseaza_toate(const char*, conditie);
-	void afiseaza_partial(const char*, string*, int);
-	void afiseaza_partial(const char*, string*, int, conditie);
+	void afiseaza_partial(const char*, vector<string>);
+	void afiseaza_partial(const char*, vector<string>, conditie);
 
 	//alte functii
 	bool exista_tabela(string);
